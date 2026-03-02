@@ -332,6 +332,36 @@ To add UAVLink to your flight controller or ground station:
 - **Maximum:** 4,122 bytes (4095-byte payload + full headers)
 - **Typical:** 26-50 bytes (common telemetry messages)
 
+### UAVLink Frame – Byte-Level Breakdown
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ STX │ B1 │ B2 │ B3 │ SYS│COMP│TGT_S│TGT_C│ NONCE │ PAYLOAD │  MAC  │ CRC │
+│     │    │    │    │    │    │     │     │(opt)  │         │ (opt) │     │
+└───────────────────────────────────────────────────────────────────────────┘
+  0xA5                    Extended Header      0-4095B    16B     2B
+```
+
+| Byte Index | Content | Value | Explanation |
+|------------|---------|-------|-------------|
+| 0 | Packet start sign | `0xA5` | Indicates the start of a new UAVLink packet |
+| 1 | Payload length [11:8] + Priority + Stream type [3:2] | Bits 7-4: Payload length upper nibble (0-15)<br>Bits 3-2: Priority (00=Bulk, 01=Normal, 10=High, 11=Emergency)<br>Bits 1-0: Stream type upper 2 bits | Bit-packed field combining 12-bit payload length MSBs, message priority for QoS, and stream type classification |
+| 2 | Payload length [7:0] | 0 - 255 | Lower 8 bits of payload length. Combined with byte 1 allows payloads up to 4095 bytes |
+| 3 | Flags + Stream type [1:0] + Sequence [5:2] | Bits 7-6: Flags (encrypted, fragmented)<br>Bits 5-4: Stream type lower bits<br>Bits 3-0: Sequence upper nibble | Encrypted flag, fragmentation flag, stream type completion, and sequence number upper bits for packet ordering |
+| 4 | Sequence [1:0] + Message ID [5:0] | Bits 7-6: Sequence lower 2 bits<br>Bits 5-0: Message ID upper 6 bits | 6-bit rolling sequence counter (0-63) detects packet loss. Message ID upper bits define payload type |
+| 5 | Message ID [1:0] + Header CRC-16 [15:10] | Bits 7-6: Message ID lower 2 bits<br>Bits 5-0: CRC upper 6 bits | 8-bit Message ID (0-255) defines payload structure. Header CRC-16 upper bits protect base header integrity |
+| 6 to 7 | Header CRC-16 [9:0] | 16-bit checksum | CRC-16 (ITU X.25 polynomial) protecting bytes 0-5 from corruption. Computed excluding packet start sign |
+| 8 | System ID | 1 - 255 | ID of the SENDING system. Allows differentiation of multiple UAVs on the same network |
+| 9 | Component ID | 0 - 255 | ID of the SENDING component. Allows differentiation of different components of the same system (e.g., autopilot, gimbal, companion computer) |
+| 10 | Target System ID | 0 - 255 | ID of the RECEIVING system. Value 0 = broadcast to all systems |
+| 11 | Target Component ID | 0 - 255 | ID of the RECEIVING component. Value 0 = broadcast to all components |
+| 12 to 19 | Nonce (if encrypted) | 64-bit value | 8-byte nonce for ChaCha20-Poly1305 AEAD encryption. Cryptographically secure random value. **Only present when encrypted flag is set** |
+| 20 to (n+19) or (n+11) | Data | (0 - 4095) bytes | Data of the message, depends on the message ID. Payload can be encrypted with ChaCha20-Poly1305 |
+| (n+20) or (n+12) to (n+35) or (n+27) | Poly1305 MAC (if encrypted) | 128-bit tag | 16-byte authentication tag from ChaCha20-Poly1305 AEAD. Authenticates header + payload. **Only present when encrypted flag is set** |
+| (n+20) or (n+12) or (n+36) or (n+28) to final | Checksum (low byte, high byte) | ITU X.25/SAE AS-4 hash | CRC-16 covering entire packet excluding this checksum field. Protects the packet from corruption. **Always final 2 bytes of packet** |
+
+**Note:** The nonce (bytes 12-19) and MAC tag (16 bytes before final CRC) are only present when the encrypted flag is set in byte 3, bit 7. This makes encrypted packets 24 bytes larger than unencrypted packets.
+
 ### Base Header (4 bytes)
 
 The base header is densely bit-packed to minimize overhead:
