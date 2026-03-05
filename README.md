@@ -2,20 +2,21 @@
 
 UAVLink is a high-performance binary communication protocol purpose-built for UAV systems. It minimizes packet overhead and maximizes reliability on lossy radio links with built-in encryption, message routing, and integrity checking. Features comprehensive optimizations including zero-copy parsing, hardware-accelerated encryption, and advanced compression.
 
-**Current Version:** 1.0 (March 2026)
+**Current Version:** 1.1 (March 2026)
 
 ### ✨ Key Achievements
 
 - ✅ **Full ChaCha20-Poly1305 AEAD Encryption** - Complete implementation with 128-bit MAC authentication
-- ✅ **ARM NEON Hardware Acceleration** - 4x crypto speedup on ARM platforms with SIMD
-- ✅ **Phase 2 Optimizations** - Zero-copy parser (2x faster) + O(1) memory pool
+- ✅ **ARM NEON Hardware Acceleration** - 4x crypto speedup on ARM platforms with SIMD (RFC 8439 compliant counter handling)
+- ✅ **Phase 2 Optimizations** - Zero-copy parser (2x faster) + O(1) memory pool with secure zeroing on free
 - ✅ **Phase 3 Advanced Features** - Delta encoding (57% bandwidth savings), LZ4 compression, Reed-Solomon FEC
 - ✅ **82.8% Bandwidth Reduction** - Combined optimizations reduce telemetry from 3.68 kbps to 0.63 kbps
 - ✅ **Comprehensive Test Suite** - 33 tests across 10 categories with 100% pass rate
-- ✅ **Production-Ready Code** - All critical bugs identified and fixed through rigorous testing
-- ✅ **5 Message Types Implemented** - Heartbeat, Attitude, GPS, Battery, RC Input
+- ✅ **Production-Ready Code** - Two full code-review cycles with all identified bugs and security issues resolved
+- ✅ **6 Message Types Implemented** - Heartbeat, Attitude, GPS, Battery, RC Input, Batch
 - ✅ **Robust Parser** - Byte-by-byte state machine with full error handling
-- ✅ **Secure Nonce Management** - Cryptographically secure nonce generation prevents replay attacks
+- ✅ **Sliding Window Replay Protection** - 32-packet bitmap window in `ul_parser_t` rejects duplicate/replayed packets
+- ✅ **Batch Message Support** - Pack/unpack multiple sub-messages in a single encrypted packet
 - ✅ **Fragmentation Support** - Handle payloads up to 4095 bytes with built-in fragmentation
 
 ### 🚀 Performance Summary
@@ -94,17 +95,17 @@ UAVLink is a high-performance binary communication protocol purpose-built for UA
 
 #### Phase 2 Optimizations
 
-| File                    | Description                              |
-| ----------------------- | ---------------------------------------- |
-| `Protocol/uavlink_fast.h` | Zero-copy parser, memory pool APIs       |
-| `Protocol/uavlink_fast.c` | Performance optimization implementations |
+| File                       | Description                               |
+| -------------------------- | ----------------------------------------- |
+| `Protocol/uavlink_phase2.h` | Zero-copy parser, memory pool APIs        |
+| `Protocol/uavlink_phase2.c` | Performance optimization implementations  |
 
 #### Phase 3 Advanced Features
 
-| File                        | Description                         |
-| --------------------------- | ----------------------------------- |
-| `Protocol/uavlink_compress.h` | Delta encoding, LZ4, FEC APIs       |
-| `Protocol/uavlink_compress.c` | Compression and FEC implementations |
+| File                        | Description                          |
+| --------------------------- | ------------------------------------ |
+| `Protocol/uavlink_phase3.h` | Delta encoding, LZ4, FEC APIs        |
+| `Protocol/uavlink_phase3.c` | Compression and FEC implementations  |
 
 #### Hardware Acceleration
 
@@ -118,7 +119,7 @@ UAVLink is a high-performance binary communication protocol purpose-built for UA
 | File                                      | Description                                      |
 | ----------------------------------------- | ------------------------------------------------ |
 | `Protocol/uavlink_benchmark.c`            | Performance profiler (1000 iterations)           |
-| `Protocol/gcs_receiver.c`                 | Network receiver demo with Phase 2 optimizations |
+| `Protocol/gcs_receiver_phase2.c`          | Network receiver demo with Phase 2 optimizations; dispatches batch sub-messages |
 | `Protocol/uav_simulator.c`                | Network transmitter demo (supports CLI IP arg)   |
 
 ### Compiling and Testing
@@ -128,7 +129,7 @@ UAVLink is a high-performance binary communication protocol purpose-built for UA
 ```bash
 cd Protocol
 gcc -Wall -O2 -o uavlink_benchmark uavlink_benchmark.c uavlink.c \
-    uavlink_fast.c uavlink_compress.c uavlink_hw_crypto.c monocypher.c -lm
+    uavlink_phase2.c uavlink_phase3.c uavlink_hw_crypto.c monocypher.c -lm
 ./uavlink_benchmark
 ```
 
@@ -137,11 +138,11 @@ gcc -Wall -O2 -o uavlink_benchmark uavlink_benchmark.c uavlink.c \
 ```bash
 cd Protocol
 
-# Compile both
-gcc -Wall -O2 -o gcs_receiver gcs_receiver.c uavlink.c \
-    uavlink_fast.c uavlink_compress.c uavlink_hw_crypto.c monocypher.c -lws2_32 -lm
-gcc -Wall -O2 -o uav_simulator uav_simulator.c uavlink.c \
-    uavlink_fast.c uavlink_compress.c uavlink_hw_crypto.c monocypher.c -lws2_32 -lm
+# Compile receiver
+gcc -Wall -std=c99 -O2 -o gcs_receiver gcs_receiver_phase2.c uavlink.c \
+    uavlink_phase2.c uavlink_phase3.c uavlink_hw_crypto.c monocypher.c -lws2_32
+gcc -Wall -std=c99 -O2 -o uav_simulator uav_simulator.c uavlink.c \
+    uavlink_phase2.c uavlink_phase3.c uavlink_hw_crypto.c monocypher.c -lws2_32
 
 # Terminal 1: Start receiver
 ./gcs_receiver
@@ -167,12 +168,12 @@ gcc -Wall -O2 -o uav_simulator uav_simulator.c uavlink.c \
 
 ```bash
 # ARM NEON build (4x crypto speedup)
-gcc -Wall -O2 -o uavlink_test test.c uavlink.c uavlink_fast.c uavlink_compress.c \
-    uavlink_hw_crypto.c monocypher.c -mfpu=neon -march=armv7-a -lm
+gcc -Wall -O2 -o uavlink_test test.c uavlink.c uavlink_phase2.c uavlink_phase3.c \
+    uavlink_hw_crypto.c monocypher.c -mfpu=neon -march=armv7-a
 
 # x86 AVX2 build (4x crypto speedup)
-gcc -Wall -O2 -o uavlink_test test.c uavlink.c uavlink_fast.c uavlink_compress.c \
-    uavlink_hw_crypto.c monocypher.c -mavx2 -lm
+gcc -Wall -O2 -o uavlink_test test.c uavlink.c uavlink_phase2.c uavlink_phase3.c \
+    uavlink_hw_crypto.c monocypher.c -mavx2
 ```
 
 ### Expected Output
@@ -260,7 +261,7 @@ To add UAVLink to your flight controller or ground station:
 
    ```c
    #include "uavlink.h"
-   #include "uavlink_fast.h"
+   #include "uavlink_phase2.h"
 
    // Initialize memory pool (once at startup)
    ul_mempool_t pool;
@@ -290,7 +291,7 @@ To add UAVLink to your flight controller or ground station:
 4. **Phase 3 Advanced Usage (57% bandwidth savings for telemetry):**
 
    ```c
-   #include "uavlink_compress.h"
+   #include "uavlink_phase3.h"
 
    // Initialize delta encoder (once at startup)
    ul_delta_ctx_t delta_ctx;
@@ -309,7 +310,33 @@ To add UAVLink to your flight controller or ground station:
    ul_delta_decode_gps(&rx_delta_ctx, encoded, len, &decoded_gps);
    ```
 
-5. **Hardware Acceleration (4x crypto speedup on ARM/x86):**
+6. **Batch Messages (pack multiple sub-messages in one encrypted packet):**
+
+   ```c
+   #include "uavlink.h"
+
+   // Build a batch
+   ul_batch_t batch = {0};
+   batch.num_messages = 2;
+   batch.messages[0].msg_id = UL_MSG_ATTITUDE;
+   batch.messages[0].length = ul_serialize_attitude(&att, batch.messages[0].data);
+   batch.messages[1].msg_id = UL_MSG_BATTERY;
+   batch.messages[1].length = ul_serialize_battery(&bat, batch.messages[1].data);
+
+   uint8_t packet[512];
+   int len = uavlink_pack_batch(packet, &batch, key, &nonce_state);
+
+   // Unpack on receiver side
+   ul_batch_t rx_batch = {0};
+   int err = ul_deserialize_batch(payload, payload_len, &rx_batch);
+   if (err == 0) {
+       for (int i = 0; i < rx_batch.num_messages; i++) {
+           // dispatch each sub-message by msg_id
+       }
+   }
+   ```
+
+7. **Hardware Acceleration (4x crypto speedup on ARM/x86):**
 
    ```c
    #include "uavlink_hw_crypto.h"
@@ -811,17 +838,34 @@ int ul_deserialize_rc_input(ul_rc_input_t *msg, const uint8_t *in);
 - Positive: Bytes consumed
 - `UL_ERR_NULL_POINTER` - Invalid pointer
 
+### Batch Deserialization
+
+```c
+int ul_deserialize_batch(const uint8_t *payload, uint16_t payload_len,
+                         ul_batch_t *batch_out);
+```
+
+Unpacks a `UL_MSG_BATCH` payload into individual sub-messages. Each sub-message contains a `msg_id`, `length`, and up to 64 bytes of `data` that can be passed directly to the corresponding `ul_deserialize_*()` function.
+
+**Returns:**
+
+- `0` (`UL_OK`) - All sub-messages decoded successfully
+- `UL_ERR_NULL_POINTER` - NULL `payload` or `batch_out`
+- `UL_ERR_INVALID_HEADER` - More than `UL_BATCH_MAX_MESSAGES` (8) reported
+- `UL_ERR_BUFFER_OVERFLOW` - Sub-message length > 64 bytes or payload truncated
+
 ### Error Codes
 
 ```c
 typedef enum {
-    UL_OK = 0,                // Success
-    UL_ERR_NULL_POINTER,      // NULL pointer argument
-    UL_ERR_BUFFER_OVERFLOW,   // Payload exceeds max size
-    UL_ERR_CRC,               // CRC checksum failed
-    UL_ERR_MAC_VERIFICATION,  // AEAD MAC authentication failed
-    UL_ERR_NO_KEY,            // Encrypted packet but no key
-    UL_ERR_INVALID_PACKET     // Malformed packet
+    UL_OK = 0,                 // Success
+    UL_ERR_NULL_POINTER,       // NULL pointer argument
+    UL_ERR_BUFFER_OVERFLOW,    // Payload exceeds max size or batch length > 64
+    UL_ERR_CRC,                // CRC checksum failed (also returned for replayed packets)
+    UL_ERR_MAC_VERIFICATION,   // AEAD MAC authentication failed (tampered packet)
+    UL_ERR_NO_KEY,             // Encrypted packet but no key provided
+    UL_ERR_INVALID_HEADER,     // Malformed or unsupported header fields
+    UL_ERR_INVALID_PACKET      // Malformed packet structure
 } ul_error_t;
 ```
 
@@ -836,45 +880,39 @@ typedef enum {
 3. **Unique Nonces:** Hybrid counter+random prevents nonce reuse attacks
 4. **CRC Checking:** Detects transmission errors independently from encryption
 5. **MAC Verification:** Automatic rejection of tampered packets
-6. **Sequence Numbers:** Enables detection of packet loss or reordering
+6. **Sliding Window Replay Protection:** 32-packet bitmap window in `ul_parser_t`; duplicate/replayed packets are silently dropped
 7. **NULL Safety:** All public APIs validate pointer arguments
-8. **Buffer Protection:** Payload size validation prevents buffer overflows
+8. **Buffer Protection:** Payload size validation prevents buffer overflows; batch messages enforce 64-byte sub-message limit
+9. **Memory Scrubbing:** Memory pool buffers are zeroed (`memset`) before being returned to the free list — no residual key/payload data
+10. **RFC 8439 Compliant NEON Crypto:** ChaCha20 counter 0 reserved for Poly1305 key derivation; plaintext encryption begins at counter 1
 
-### 🔒 Recent Security Enhancements (February 2026)
+### 🔒 Security Enhancements History
 
-**Full ChaCha20-Poly1305 AEAD Implementation:**
+**February 2026 — Full ChaCha20-Poly1305 AEAD:**
 
-The protocol now features production-grade authenticated encryption:
+1. **Genuine MAC Authentication** — Replaced mock MAC tags with real Poly1305; 16-byte (128-bit) tags cover ciphertext + header as AAD
+2. **Comprehensive Error Handling** — `ul_error_t` enum with distinct error codes; `UL_ERR_MAC_VERIFICATION` for authentication failures
+3. **Defensive Programming** — NULL checks on all public APIs; `UL_MAX_PAYLOAD_SIZE` constant; payload size validation
+4. **AEAD Details** — Nonce: 24-byte (8-byte hybrid counter+random, zero-padded); CRC-16 after MAC tag
 
-1. **Genuine MAC Authentication**
-   - Replaced mock MAC tags with real Poly1305 authentication
-   - 16-byte (128-bit) MAC tags computed over ciphertext + header
-   - Header authenticated as Additional Authenticated Data (AAD)
-   - Prevents both ciphertext and header tampering
+**March 2026 — Second Code Review Hardening:**
 
-2. **Comprehensive Error Handling**
-   - Added `ul_error_t` enum with 7 distinct error codes
-   - `UL_ERR_MAC_VERIFICATION` specifically identifies authentication failures
-   - All error paths properly clean up parser state
+1. **Sliding Window Replay Protection** — `ul_parser_t` gains `replay_init`, `last_seq`, and `replay_window` (32-bit bitmap); each received sequence number is checked against the window before acceptance. Packets outside the 32-slot window or already-seen sequences are rejected.
+2. **RFC 8439 NEON Counter Fix** — `ul_chacha20_neon` now accepts an `initial_counter` argument. Poly1305 key generation uses counter=0; plaintext encryption starts at counter=1. Previously counter=0 was shared, leaking the key block into the first 32 bytes of ciphertext.
+3. **CRC Seed for CMD Messages** — Extended the CRC seed table to include `UL_MSG_CMD` (seed=217) and `UL_MSG_CMD_ACK`, preventing seed=0 (trivially bypassed) for command packets.
+4. **Encrypt Policy Table Removed** — Replaced a 4 KB static BSS array with a `switch`-case in `ul_get_encrypt_policy()`, eliminating ~4 KB of BSS and the 1024-entry table attack surface.
+5. **Memory Scrubbing** — `ul_mempool_free()` now zeroes the freed buffer before marking it available; prevents residual key material or payload data from being read via a subsequent allocation.
+6. **Zero-Copy CMD Parsing Fixed** — Parser now correctly reads the extra `target_sys_id` byte for CMD/CMD_ACK messages; a missing byte caused the nonce to be extracted at the wrong offset, silently breaking decryption.
 
-3. **Defensive Programming**
-   - NULL pointer checks on all 20+ public API functions
-   - Buffer overflow protection with `UL_MAX_PAYLOAD_SIZE` constant
-   - Payload size validation in both packer and parser
+**Security Posture (Current):**
 
-4. **AEAD Technical Details**
-   - Encryption: `crypto_aead_lock(mac, ciphertext, key, nonce, header, header_len, plaintext, text_len)`
-   - Decryption: `crypto_aead_unlock(plaintext, mac, key, nonce, header, header_len, ciphertext, text_len)`
-   - Nonce format: 24-byte array (first 8 bytes from hybrid counter+random, rest zero-padded)
-   - CRC-16 computed after MAC tag for transmission error detection
-
-**Security Posture:**
-
-- ✅ No replay attacks (hybrid nonce strategy)
+- ✅ No replay attacks (32-packet sliding window in parser)
 - ✅ No tampering (AEAD MAC verification)
 - ✅ No bit-flip attacks (CRC-16 + Poly1305)
-- ✅ No buffer overflows (bounds checking)
+- ✅ No buffer overflows (bounds checking on batches, payloads, delta decoder)
 - ✅ No NULL dereferences (comprehensive validation)
+- ✅ No NEON counter reuse (RFC 8439 compliant)
+- ✅ No residual data in memory pool (zeroed on free)
 
 ### ⚠️ Production Recommendations
 
@@ -890,9 +928,9 @@ The protocol now features production-grade authenticated encryption:
    - Alternative: Initialize with timestamp + random on boot
 
 3. **Replay Protection:**
-   - Implement sequence number tracking on receiver
-   - Reject packets with old sequence numbers
-   - Window-based acceptance for out-of-order delivery
+   - ✅ **Implemented** — 32-packet sliding window bitmap is built into `ul_parser_t`
+   - Packets outside the window (older than 32 sequence numbers) are dropped
+   - For multi-vehicle deployments, instantiate one `ul_parser_t` per vehicle
 
 4. **Multi-Vehicle Scenarios:**
    - Track nonce state per vehicle
@@ -1169,13 +1207,22 @@ On ARM Cortex-M4 @168MHz:
   - Full encryption implementation
   - MAC authentication
   - Security hardening
-- **March 2026** - Comprehensive testing and optimization
+- **Early March 2026** - Comprehensive testing and optimization
   - Built 33-test validation framework
   - Discovered and fixed 3 critical bugs
   - Achieved 100% test pass rate
   - Phase 2 & 3 performance optimizations (zero-copy parser, memory pool, delta encoding)
   - Two-PC WiFi network test with zero packet loss
   - Production-ready release
+- **March 2026** - Second code review: hardening and new features
+  - Fixed 7 protocol bugs (CMD zero-copy parser, memory pool leak, FEC output layout, delta endianness, delta bounds, NEON counter, batch overread)
+  - Implemented 32-packet sliding window replay protection in `ul_parser_t`
+  - Fixed RFC 8439 NEON ChaCha20 counter separation (Poly1305 key vs. encryption)
+  - Extended CRC seed table to cover CMD/CMD_ACK messages
+  - Replaced 4 KB BSS encrypt-policy table with `switch`-case
+  - Memory pool now zeroes buffers on free (prevents data leakage)
+  - Added `ul_deserialize_batch()` and wired up GCS receiver to dispatch batch sub-messages
+  - All 234/234 encrypted packets verified across WiFi with zero errors
 
 ---
 
@@ -1184,12 +1231,16 @@ On ARM Cortex-M4 @168MHz:
 - [x] ~~Additional message types (GPS, battery, RC input, etc.)~~ - **COMPLETED**
 - [x] ~~Full ChaCha20-Poly1305 AEAD implementation~~ - **COMPLETED**
 - [x] ~~Comprehensive unit test suite~~ - **COMPLETED (33 tests, 100% pass rate)**
+- [x] ~~Replay protection~~ - **COMPLETED (32-packet sliding window in `ul_parser_t`)**
+- [x] ~~Batch message support~~ - **COMPLETED (`uavlink_pack_batch` + `ul_deserialize_batch`)**
+- [x] ~~Security hardening (code review cycle 2)~~ - **COMPLETED (7 bugs + 3 security issues fixed)**
 - [ ] Python/JavaScript parser implementations
 - [ ] Wireshark dissector for protocol analysis
 - [ ] Formal specification document
 - [ ] Performance benchmarks on various platforms
 - [ ] Fragment reassembly implementation
 - [ ] Additional message types (IMU, Barometer, etc.)
+- [ ] Nonce counter persistence across reboots (NVM storage)
 
 ---
 
