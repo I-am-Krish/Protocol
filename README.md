@@ -1234,9 +1234,9 @@ On ARM Cortex-M4 @168MHz:
 - [x] ~~Replay protection~~ - **COMPLETED (32-packet sliding window in `ul_parser_t`)**
 - [x] ~~Batch message support~~ - **COMPLETED (`uavlink_pack_batch` + `ul_deserialize_batch`)**
 - [x] ~~Security hardening (code review cycle 2)~~ - **COMPLETED (7 bugs + 3 security issues fixed)**
+- [x] ~~Fragment reassembly implementation~~ - **COMPLETED**
 - [ ] Wireshark dissector for protocol analysis
 - [ ] Performance benchmarks on various platforms
-- [ ] Fragment reassembly implementation
 - [ ] Additional message types (IMU, Barometer, etc.)
 - [ ] Nonce counter persistence across reboots (NVM storage)
 
