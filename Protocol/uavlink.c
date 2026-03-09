@@ -1011,6 +1011,11 @@ int ul_parse_char(ul_parser_t *p, uint8_t c, const uint8_t *key_32b)
         break;
 
     case UL_PARSE_STATE_PAYLOAD:
+        if (p->buf_idx >= sizeof(p->buffer)) {
+            ul_parser_init(p);
+            p->error_count++;
+            return UL_ERR_BUFFER_OVERFLOW;
+        }
         p->buffer[p->buf_idx++] = c;
         if (p->buf_idx == p->expected_len)
         {
@@ -1020,6 +1025,11 @@ int ul_parse_char(ul_parser_t *p, uint8_t c, const uint8_t *key_32b)
         break;
 
     case UL_PARSE_STATE_CRC:
+        if (p->buf_idx >= sizeof(p->buffer)) {
+            ul_parser_init(p);
+            p->error_count++;
+            return UL_ERR_BUFFER_OVERFLOW;
+        }
         p->buffer[p->buf_idx++] = c;
         if (p->buf_idx == p->expected_len)
         {
