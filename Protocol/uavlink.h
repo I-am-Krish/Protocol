@@ -263,6 +263,7 @@ typedef struct
 {
     uint8_t public_key[32]; // 256-bit X25519 public key
     uint8_t seq_num;        // Handshake sequence number (to detect duplicates)
+    uint8_t signature[64];  // 512-bit Ed25519 signature
 } ul_key_exchange_t;
 
 /* Session Key Exchange ACK */

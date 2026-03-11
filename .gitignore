@@ -1,4 +1,3 @@
-Documentation/
 *.dat
 *.err
 *.in
@@ -37,6 +36,7 @@ Thumbs.db
 *.orig
 
 # Documentation (keeping source, ignoring builds)
+Documentation/
 Documentation/*.pdf
 Documentation/*.aux
 Documentation/*.log

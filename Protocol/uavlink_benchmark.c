@@ -58,20 +58,23 @@ static void init_test_key(void)
 {
     // Try to load from file first (for consistent benchmarking)
     FILE *f = fopen("benchmark_key.bin", "rb");
-    if (f != NULL) {
+    if (f != NULL)
+    {
         size_t read = fread(TEST_KEY, 1, 32, f);
         fclose(f);
-        if (read == 32) {
+        if (read == 32)
+        {
             printf("✓ Loaded test key from benchmark_key.bin\n");
             return;
         }
     }
-    
+
     // Generate deterministic key for benchmarking (NOT for production use)
     printf("⚠️  Generating deterministic test key for benchmarking\n");
     printf("   (To use a specific key, create benchmark_key.bin)\n");
-    for (int i = 0; i < 32; i++) {
-        TEST_KEY[i] = (uint8_t)(i * 7 + 1);  // Deterministic pattern
+    for (int i = 0; i < 32; i++)
+    {
+        TEST_KEY[i] = (uint8_t)(i * 7 + 1); // Deterministic pattern
     }
 }
 

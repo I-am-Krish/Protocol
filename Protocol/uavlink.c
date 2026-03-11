@@ -510,7 +510,8 @@ int ul_serialize_key_exchange(const ul_key_exchange_t *kx, uint8_t *out)
 
     memcpy(out, kx->public_key, 32);
     out[32] = kx->seq_num;
-    return 33;
+    memcpy(out + 33, kx->signature, 64);
+    return 97;
 }
 
 int ul_deserialize_key_exchange(ul_key_exchange_t *kx, const uint8_t *in)
@@ -520,7 +521,8 @@ int ul_deserialize_key_exchange(ul_key_exchange_t *kx, const uint8_t *in)
 
     memcpy(kx->public_key, in, 32);
     kx->seq_num = in[32];
-    return 33;
+    memcpy(kx->signature, in + 33, 64);
+    return 97;
 }
 
 int ul_serialize_key_exchange_ack(const ul_key_exchange_ack_t *ack, uint8_t *out)

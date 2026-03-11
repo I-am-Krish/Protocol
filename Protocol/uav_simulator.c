@@ -43,6 +43,13 @@ static uint32_t get_time_ms(void)
 static uint8_t session_key[32] = {0};
 static uint8_t private_key[32] = {0};
 static uint8_t public_key[32] = {0};
+
+// Identity Key State
+static uint8_t uav_id_seed[32] = {0};
+static uint8_t uav_id_secret[64] = {0};
+static uint8_t uav_id_public[32] = {0};
+static uint8_t gcs_id_public[32] = {0};
+
 static ul_ecdh_state_t ecdh_state = UL_ECDH_IDLE;
 static uint8_t ecdh_seq_num = 1;         // Our handshake sequence number
 static uint8_t ecdh_peer_seq = 0;        // Peer's sequence number
@@ -266,6 +273,26 @@ int main(int argc, char *argv[])
         printf("No IP provided, defaulting to 127.0.0.1\n\n");
     }
 
+    // Load Identity Keys
+    FILE *f_uav_seed = fopen("uav_id_seed.bin", "rb");
+    if (!f_uav_seed || fread(uav_id_seed, 1, 32, f_uav_seed) != 32)
+    {
+        printf("ERROR: Could not load uav_id_seed.bin (generate with keygen.py)\n");
+        return 1;
+    }
+    if (f_uav_seed) fclose(f_uav_seed);
+
+    FILE *f_gcs_pub = fopen("gcs_pub.bin", "rb");
+    if (!f_gcs_pub || fread(gcs_id_public, 1, 32, f_gcs_pub) != 32)
+    {
+        printf("ERROR: Could not load gcs_pub.bin (generate with id_gen.exe)\n");
+        return 1;
+    }
+    if (f_gcs_pub) fclose(f_gcs_pub);
+
+    crypto_eddsa_key_pair(uav_id_secret, uav_id_public, uav_id_seed);
+    printf("Identity loaded: EdDSA Keys loaded successfully\n");
+
     // Initialize systems
     ul_mempool_t pool;
     ul_mempool_init(&pool);
@@ -466,6 +493,16 @@ int main(int argc, char *argv[])
                         if (ecdh_state == UL_ECDH_ESTABLISHED && rx_kx.seq_num == ecdh_peer_seq)
                         {
                             printf("  (Duplicate KEY_EXCHANGE seq=%u, already established)\n", rx_kx.seq_num);
+                            break;
+                        }
+
+                        // Authenticate incoming Key Exchange Request
+                        uint8_t data_to_sign[33];
+                        memcpy(data_to_sign, rx_kx.public_key, 32);
+                        data_to_sign[32] = rx_kx.seq_num;
+                        if (crypto_eddsa_check(rx_kx.signature, gcs_id_public, data_to_sign, 33) != 0)
+                        {
+                            printf("  >>> ECDH FATAL: EdDSA signature verification failed. MITM detected!\n");
                             break;
                         }
 
@@ -710,7 +747,13 @@ int main(int argc, char *argv[])
                 memcpy(kx.public_key, public_key, 32);
                 kx.seq_num = ecdh_seq_num;
 
-                uint8_t payload[33];
+                // Create signature over (public_key || seq_num)
+                uint8_t data_to_sign[33];
+                memcpy(data_to_sign, public_key, 32);
+                data_to_sign[32] = ecdh_seq_num;
+                crypto_eddsa_sign(kx.signature, uav_id_secret, data_to_sign, 33);
+
+                uint8_t payload[97];
                 int payload_len = ul_serialize_key_exchange(&kx, payload);
 
                 ul_header_t header = {0};
