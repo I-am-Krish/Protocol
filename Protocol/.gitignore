@@ -12,8 +12,6 @@
 *.bak
 *.ps1
 *.sh
-*.text
-*.txt
 
 # === DOCUMENTATION (INTERNAL USE ONLY - DO NOT UPLOAD) ===
 Documentation/
@@ -54,8 +52,3 @@ Protocol/keys/
 Protocol/testing/logs/
 Protocol/_vm_keygen_tmp/
 Protocol/wireshark/
-
-# === Others ===
-Protocol/Protocol/testing/crash-71650fa854397f3fb535f742ed25af6cc135a3de
-Protocol/Protocol/testing/native_fuzzer
-
