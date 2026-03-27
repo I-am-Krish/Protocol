@@ -1203,8 +1203,13 @@ int ul_parse_char(ul_parser_t *p, uint8_t c, const uint8_t *key_32b)
         }
         break;
     }
-    return 0; /* BUG-03 FIX: Return 0 (not 1) while more bytes are needed.
-               Returning 1 was incorrectly signalling a complete packet. */
+    /* Parser return value convention:
+       UL_OK (0)  = complete valid packet ready in parser->payload / parser->header
+       1          = still parsing, need more bytes (not an error)
+       < 0        = error (UL_ERR_CRC, UL_ERR_REPLAY, UL_ERR_MAC_VERIFICATION, …)
+       The previous BUG-03 "fix" changed this to 0 which collided with UL_OK
+       and caused every byte to trigger a false "packet complete". Reverted. */
+    return 1; /* Still parsing — need more bytes */
 }
 
 /* --- Advanced Packing with Nonce Management --- */

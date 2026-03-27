@@ -515,7 +515,7 @@ int ul_check_replay_window(ul_parser_zerocopy_t *p, uint16_t seq)
             if (offset >= 32 || (p->replay_window & (1UL << offset)))
             {
                 p->error_count++;
-                return UL_ERR_CRC; // Replay detected
+                return UL_ERR_REPLAY; /* BUG-02 FIX (fast path): distinguish replay attacks from link errors */
             }
             p->replay_window |= (1UL << offset);
         }
