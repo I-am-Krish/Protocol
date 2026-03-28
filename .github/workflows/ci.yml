@@ -33,3 +33,7 @@ jobs:
       run: |
         gcc -Wall -O2 -Isrc/core -o testing/packet_size_test testing/packet_size_test.c src/core/uavlink.c src/core/uavlink_fast.c src/core/uavlink_compress.c src/core/uavlink_hw_crypto.c src/core/monocypher.c src/core/uavlink_keymanager.c -lm
         ./testing/packet_size_test
+
+    - name: Run Integration Smoke Test (1 min)
+      working-directory: ./Protocol
+      run: python3 test_1min.py
