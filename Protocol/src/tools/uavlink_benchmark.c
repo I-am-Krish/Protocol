@@ -50,21 +50,23 @@ static uint64_t get_time_us(void)
 }
 #endif
 
-// Test key - loaded from file or generated for testing
-static uint8_t TEST_KEY[32];
+// Test session - loaded from file or generated for testing
+static ul_session_t TEST_SESSION;
 
-// Load or generate test key
-static void init_test_key(void)
+// Load or generate test session
+static void init_test_session(void)
 {
+    uint8_t key[32];
     // Try to load from file first (for consistent benchmarking)
     FILE *f = fopen("benchmark_key.bin", "rb");
     if (f != NULL)
     {
-        size_t read = fread(TEST_KEY, 1, 32, f);
+        size_t read = fread(key, 1, 32, f);
         fclose(f);
         if (read == 32)
         {
             printf("✓ Loaded test key from benchmark_key.bin\n");
+            ul_session_init(&TEST_SESSION, key);
             return;
         }
     }
@@ -74,8 +76,9 @@ static void init_test_key(void)
     printf("   (To use a specific key, create benchmark_key.bin)\n");
     for (int i = 0; i < 32; i++)
     {
-        TEST_KEY[i] = (uint8_t)(i * 7 + 1); // Deterministic pattern
+        key[i] = (uint8_t)(i * 7 + 1); // Deterministic pattern
     }
+    ul_session_init(&TEST_SESSION, key);
 }
 
 typedef struct
@@ -140,9 +143,9 @@ void benchmark_baseline(benchmark_result_t *result, int iterations)
 
         uint8_t packet[256];
 
-        // Time packing
+        // Time packing using the new public wrapper
         uint64_t start = get_time_us();
-        int packet_len = uavlink_pack(packet, &header, payload, TEST_KEY);
+        int packet_len = uavlink_pack_with_nonce(packet, &header, payload, &TEST_SESSION);
         uint64_t end = get_time_us();
         result->pack_time_us += (end - start);
         result->bytes_packed += packet_len;
@@ -151,7 +154,7 @@ void benchmark_baseline(benchmark_result_t *result, int iterations)
         start = get_time_us();
         for (int j = 0; j < packet_len; j++)
         {
-            ul_parse_char(&parser, packet[j], TEST_KEY);
+            ul_parse_char(&parser, packet[j], TEST_SESSION.key);
         }
         end = get_time_us();
         result->parse_time_us += (end - start);
@@ -198,10 +201,9 @@ void benchmark_phase1(benchmark_result_t *result, int iterations)
 
         uint8_t packet[256];
 
-        // Time selective packing with crypto cache
+        // Time selective packing with crypto cache using session
         uint64_t start = get_time_us();
-        int packet_len = uavlink_pack_cached(packet, &header, payload, TEST_KEY,
-                                             &nonce_state, &crypto_ctx);
+        int packet_len = uavlink_pack_cached(packet, &header, payload, &TEST_SESSION, &crypto_ctx);
         uint64_t end = get_time_us();
         result->pack_time_us += (end - start);
         result->bytes_packed += packet_len;
@@ -210,7 +212,7 @@ void benchmark_phase1(benchmark_result_t *result, int iterations)
         start = get_time_us();
         for (int j = 0; j < packet_len; j++)
         {
-            ul_parse_char(&parser, packet[j], TEST_KEY);
+            ul_parse_char(&parser, packet[j], TEST_SESSION.key);
         }
         end = get_time_us();
         result->parse_time_us += (end - start);
@@ -232,9 +234,6 @@ void benchmark_phase2(benchmark_result_t *result, int iterations)
 
     ul_parser_zerocopy_t parser;
     ul_parser_zerocopy_init(&parser);
-
-    ul_nonce_state_t nonce_state;
-    ul_nonce_init(&nonce_state);
 
     ul_crypto_ctx_t crypto_ctx;
     ul_crypto_ctx_init(&crypto_ctx);
@@ -261,11 +260,10 @@ void benchmark_phase2(benchmark_result_t *result, int iterations)
 
         uint8_t *packet = NULL;
 
-        // Time fast pack (includes memory pool allocation)
+        // Time fast pack (includes memory pool allocation) using session
         uint64_t alloc_start = get_time_us();
         uint64_t start = get_time_us();
-        int packet_len = ul_pack_fast(&pool, &header, payload, TEST_KEY,
-                                      &nonce_state, &crypto_ctx, &packet);
+        int packet_len = ul_pack_fast(&pool, &header, payload, &TEST_SESSION, &crypto_ctx, &packet);
         uint64_t end = get_time_us();
         result->pack_time_us += (end - start);
         result->alloc_time_us += (end - alloc_start);
@@ -336,8 +334,8 @@ int main(void)
     print_separator();
     printf("\n");
 
-    // Initialize test key
-    init_test_key();
+    // Initialize test session
+    init_test_session();
     printf("\n");
 
     // Detect system capabilities
