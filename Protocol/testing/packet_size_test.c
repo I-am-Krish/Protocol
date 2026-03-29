@@ -50,7 +50,7 @@ static int test_non_fragmented(uint16_t seq, const uint8_t *payload, size_t payl
     header.target_sys_id = 0;
     header.msg_id = UL_MSG_HEARTBEAT;
 
-    int packet_len = uavlink_pack(packet, &header, payload, NULL);
+    int packet_len = uavlink_pack_with_nonce(packet, &header, payload, NULL);
     if (packet_len < 0)
     {
         return packet_len;
@@ -113,7 +113,7 @@ static int test_fragmented(uint16_t *seq, const uint8_t *payload, size_t payload
     {
         uint8_t packet[2048];
         frags.headers[i].sequence = (*seq)++;
-        int packet_len = uavlink_pack(packet, &frags.headers[i], frags.payloads[i], NULL);
+        int packet_len = uavlink_pack_with_nonce(packet, &frags.headers[i], frags.payloads[i], NULL);
         if (packet_len < 0)
         {
             return -2001;
