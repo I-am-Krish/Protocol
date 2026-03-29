@@ -31,7 +31,7 @@ jobs:
     - name: Build and Run Packet Size Test
       working-directory: ./Protocol
       run: |
-        gcc -Wall -O2 -Isrc/core -o testing/packet_size_test testing/packet_size_test.c src/core/uavlink.c src/core/uavlink_fast.c src/core/uavlink_compress.c src/core/uavlink_hw_crypto.c src/core/monocypher.c src/core/uavlink_keymanager.c -lm
+        gcc -Wall -O2 -Isrc/core -o testing/packet_size_test testing/packet_size_test.c src/core/kestrel.c src/core/kestrel_fast.c src/core/kestrel_compress.c src/core/kestrel_hw_crypto.c src/core/monocypher.c src/core/kestrel_keymanager.c -lm
         ./testing/packet_size_test
 
     - name: Run Integration Smoke Test (1 min)
