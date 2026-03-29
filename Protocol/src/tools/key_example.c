@@ -41,7 +41,16 @@ static int example_binary_file(void)
 
     if (result == UL_KEY_OK)
     {
-        // Use key for encryption
+        // Create session from loaded key
+        ul_session_t session;
+        if (ul_session_init(&session, key) != 0)
+        {
+            printf("✗ Failed to initialize session from loaded key\n");
+            ul_secure_zero(key, 32);
+            return UL_KEY_ERR_FORMAT;
+        }
+
+        // Use session for encryption
         ul_attitude_t att = {
             .roll = 0.1f,
             .pitch = 0.2f,
@@ -65,15 +74,16 @@ static int example_binary_file(void)
             .msg_id = UL_MSG_ATTITUDE};
 
         uint8_t packet[256];
-        int packet_len = uavlink_pack(packet, &header, payload, key);
+        int packet_len = uavlink_pack_with_nonce(packet, &header, payload, &session);
 
         if (packet_len > 0)
         {
-            printf("  Encrypted packet created: %d bytes\n", packet_len);
+            printf("  Encrypted packet created with session: %d bytes\n", packet_len);
         }
 
-        // Clear key from memory
+        // Clear key and session from memory
         ul_secure_zero(key, 32);
+        ul_session_destroy(&session);
     }
 
     return result;
