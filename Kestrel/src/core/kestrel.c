@@ -788,49 +788,65 @@ int ks_reassembly_add(ks_reassembly_ctx_t *ctx, const ks_header_t *hdr,
 /* --- Nonce Management Implementation --- */
 
 /* Platform-specific secure random number generation */
-static uint32_t ks_get_random_u32(void)
+static int ks_get_random_u32(uint32_t *out_val)
 {
 #ifdef _WIN32
     /* Windows CryptGenRandom */
     HCRYPTPROV hProvider = 0;
-    uint32_t random_value = 0;
+    
+    if (!out_val) return -1;
+    *out_val = 0;
 
     if (!CryptAcquireContext(&hProvider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
     {
-        abort(); // Fail instead of fallback
+        return -1; // Fail instead of fallback
     }
-    if (!CryptGenRandom(hProvider, sizeof(random_value), (BYTE *)&random_value))
+    if (!CryptGenRandom(hProvider, sizeof(uint32_t), (BYTE *)out_val))
     {
-        abort(); // Fail instead of fallback
+        CryptReleaseContext(hProvider, 0);
+        return -1; // Fail instead of fallback
     }
     CryptReleaseContext(hProvider, 0);
-    return random_value;
+    return 0;
 #else
     /* Linux/Unix /dev/urandom */
-    uint32_t random_value = 0;
     int fd = open("/dev/urandom", O_RDONLY);
+    
+    if (!out_val) return -1;
+    *out_val = 0;
+
     if (fd < 0)
     {
-        abort(); // Fail instead of fallback
+        return -1; // Fail instead of fallback
     }
-    ssize_t n = read(fd, &random_value, sizeof(random_value));
+    ssize_t n = read(fd, out_val, sizeof(uint32_t));
     close(fd);
-    if (n != (ssize_t)sizeof(random_value))
+    if (n != (ssize_t)sizeof(uint32_t))
     {
-        abort(); // Fail instead of fallback
+        return -1; // Fail instead of fallback
     }
-    return random_value;
+    return 0;
 #endif
 }
 
-void ks_nonce_init(ks_nonce_state_t *state)
+// void ks_nonce_init(ks_nonce_state_t *state)
+// {
+//     if (!state)
+//         return;
+
+//     /* Initialize counter with random value for extra security */
+//     state->counter = ks_get_random_u32();
+//     state->initialized = 1;
+// }
+
+int ks_nonce_init(ks_nonce_state_t *state)
 {
     if (!state)
-        return;
-
-    /* Initialize counter with random value for extra security */
-    state->counter = ks_get_random_u32();
+        return -1;
+    if (ks_get_random_u32(&state->counter) != 0)
+        return -1;
     state->initialized = 1;
+    return 0;
 }
 
 uint32_t ks_nonce_get_counter(const ks_nonce_state_t *state)
@@ -874,7 +890,8 @@ void ks_nonce_generate(ks_nonce_state_t *state, uint8_t nonce[8])
         state->counter = 0; /* Guaranteed fresh — ks_nonce_init() never issues counter=0 */
     }
     uint32_t counter = state->counter++;
-    uint32_t random = ks_get_random_u32();
+    uint32_t random = 0;
+    ks_get_random_u32(&random);
 
     /* Pack counter (little-endian) */
     nonce[0] = counter & 0xFF;
@@ -896,10 +913,12 @@ int ks_session_init(ks_session_t *session, const uint8_t key[32])
     if (!session || !key)
         return -1;
 
-    memcpy(session->key, key, 32);
-    ks_nonce_init(&session->nonce_state);
+    // Zero the session out first to ensure clean state
+    memset(session, 0, sizeof(ks_session_t));
 
-    if (!session->nonce_state.initialized)
+    memcpy(session->key, key, 32);
+    
+    if (ks_nonce_init(&session->nonce_state) != 0)
     {
         /* CSPRNG failure — wipe partial state and report */
         crypto_wipe(session->key, 32);

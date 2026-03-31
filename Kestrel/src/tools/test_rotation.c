@@ -54,6 +54,15 @@ int main() {
     printf("New nonce counter: %u\n", session.nonce_state.counter);
     fflush(stdout);
     
+    if (session.nonce_state.counter == 0) {
+        printf("FAILED: Post-rotation nonce counter is zero — CSPRNG seed not applied.\n");
+        fflush(stdout);
+        return 1;
+    }
+    printf("SUCCESS: Post-rotation nonce counter is CSPRNG-seeded (%u).\n",
+           session.nonce_state.counter);
+    fflush(stdout);
+
     if (memcmp(session.key, new_key, 32) == 0) {
         printf("SUCCESS: Session key matches new key.\n");
         fflush(stdout);

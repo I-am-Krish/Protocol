@@ -459,7 +459,8 @@ int ks_decode_ext_header(const uint8_t *buf, ks_header_t *h);
 /* --- Nonce Management Functions --- */
 
 /* Initialize nonce state. Must be called before first use. */
-void ks_nonce_init(ks_nonce_state_t *state);
+//int ks_nonce_init(ks_nonce_state_t *state);
+int ks_nonce_init(ks_nonce_state_t *state);
 
 /* Get the current 32-bit nonce counter for NVM persistence. */
 uint32_t ks_nonce_get_counter(const ks_nonce_state_t *state);

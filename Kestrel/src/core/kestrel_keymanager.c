@@ -417,9 +417,16 @@ int ks_atomic_key_rotate(ks_session_t *session, const uint8_t new_key[32])
      * Reset the nonce counter to 0 for the new key. This ensures both sides
      * stay in sync on the new starting nonce without explicit negotiation.
      * Nonce uniqueness is per-key, so resetting to 0 for a fresh key is safe. */
+    // memcpy(session->key, new_key, 32);
+    // session->nonce_state.counter = 0;
+    // session->nonce_state.initialized = 1;
     memcpy(session->key, new_key, 32);
-    session->nonce_state.counter = 0;
-    session->nonce_state.initialized = 1;
+    if (ks_nonce_init(&session->nonce_state) != 0) {
+        /* CSPRNG failed — roll back to old key and nonce state */
+        memcpy(session->key, old_key, 32);
+        session->nonce_state = old_nonce_state;
+        result = -1;
+    }
 
     /* --- STAGE 3: WIPE ---
      * Zero the old key and nonce copies unconditionally.

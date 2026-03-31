@@ -21,19 +21,19 @@ jobs:
         sudo apt-get install -y build-essential gcc make
 
     - name: Create bin directory
-      working-directory: ./Protocol
+      working-directory: ./Kestrel
       run: mkdir -p bin
 
     - name: Build project with Make
-      working-directory: ./Protocol
+      working-directory: ./Kestrel
       run: make all
 
     - name: Build and Run Packet Size Test
-      working-directory: ./Protocol
+      working-directory: ./Kestrel
       run: |
         gcc -Wall -O2 -Isrc/core -o testing/packet_size_test testing/packet_size_test.c src/core/kestrel.c src/core/kestrel_fast.c src/core/kestrel_compress.c src/core/kestrel_hw_crypto.c src/core/monocypher.c src/core/kestrel_keymanager.c -lm
         ./testing/packet_size_test
 
     - name: Run Integration Smoke Test (1 min)
-      working-directory: ./Protocol
+      working-directory: ./Kestrel
       run: python3 testing/test_1min.py
