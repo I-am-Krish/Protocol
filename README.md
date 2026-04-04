@@ -18,6 +18,7 @@
 - ✅ **Robust Parser** - Byte-by-byte state machine with full error handling
 - ✅ **Secure Nonce Management** - Cryptographically secure nonce generation prevents replay attacks
 - ✅ **Fragmentation Support** - Handle payloads up to 4095 bytes with built-in fragmentation
+- ✅ **Kestrel Legion Variant** - Expanded 13-bit addressing space for large-scale device networks (up to 8,192 logic nodes) with robust replay defense
 
 ### 🚀 Performance Summary
 
@@ -91,6 +92,7 @@
 | ------------------------- | ----------------------------------------------- |
 | `Protocol/kestrel.h`      | Core API, structures, and constants             |
 | `Protocol/kestrel.c`      | Encoding/decoding implementation with AEAD      |
+| `Protocol/kestrel_legion.c/.h` | Legion protocol extension for large networks (8,192 nodes) |
 | `Protocol/monocypher.c/h` | Portable ChaCha20-Poly1305 cryptography library |
 
 #### Phase 2 Optimizations

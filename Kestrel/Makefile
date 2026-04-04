@@ -9,7 +9,8 @@ BIN_DIR = bin
 
 # Core Protocol Files
 CORE_SRC = $(SRC_CORE)/kestrel.c $(SRC_CORE)/kestrel_fast.c $(SRC_CORE)/kestrel_compress.c \
-           $(SRC_CORE)/kestrel_hw_crypto.c $(SRC_CORE)/monocypher.c $(SRC_CORE)/kestrel_keymanager.c
+           $(SRC_CORE)/kestrel_hw_crypto.c $(SRC_CORE)/monocypher.c $(SRC_CORE)/kestrel_keymanager.c \
+           $(SRC_CORE)/kestrel_legion.c
 
 # Platform-specific flags
 ifeq ($(OS),Windows_NT)
@@ -34,7 +35,10 @@ simulator: $(SRC_APPS)/uav_simulator.c $(CORE_SRC)
 key_example: $(SRC_TOOLS)/key_example.c $(CORE_SRC)
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/key_example$(EXT) $(SRC_TOOLS)/key_example.c $(CORE_SRC) $(LDFLAGS)
 
+legion_test: testing/legion_unit_test.c $(CORE_SRC)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/legion_test$(EXT) testing/legion_unit_test.c $(CORE_SRC) $(LDFLAGS)
+
 clean:
 	rm -f bin/* src/core/*.o src/apps/*.o src/tools/*.o
 
-.PHONY: all benchmark receiver simulator key_example clean
+.PHONY: all benchmark receiver simulator key_example legion_test clean
