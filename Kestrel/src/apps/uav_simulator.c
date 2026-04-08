@@ -387,6 +387,31 @@ int main(int argc, char *argv[])
     ks_rid_init("KESTREL-UAV-001");
     printf("ASTM F3411: Remote ID Module Initialized.\n");
 
+    /* DGCA NPNT (Bug #1 fix): Load DGCA authority public key at startup.
+     * On success: g_npnt_enabled = true  -> ARM gate is active (India deployment).
+     * On failure: g_npnt_enabled = false -> ARM gate bypassed (non-India deployment). */
+    {
+        FILE *f_dgca = fopen("keys/dgca_pub.bin", "rb");
+        if (f_dgca)
+        {
+            if (fread(g_dgca_pub, 1, 32, f_dgca) == 32)
+            {
+                g_npnt_enabled = true;
+                printf(GREEN "DGCA NPNT: Authority key loaded (32 bytes). NPNT gate ENABLED." RESET "\n");
+                printf("DGCA NPNT: Push KS_MSG_NPNT_PA from GCS before sending KS_CMD_ARM.\n");
+            }
+            else
+            {
+                printf(RED "DGCA NPNT: keys/dgca_pub.bin too short — NPNT disabled." RESET "\n");
+            }
+            fclose(f_dgca);
+        }
+        else
+        {
+            printf("DGCA NPNT: keys/dgca_pub.bin not found — NPNT disabled (non-India deployment).\n");
+        }
+    }
+
     // Initialize systems
     ks_mempool_t pool;
     ks_mempool_init(&pool);
@@ -845,6 +870,23 @@ int main(int argc, char *argv[])
                                           &pool, &g_session, &crypto_ctx);
                             printf("  >>> Waypoint %u stored (%u total)\n",
                                    item.seq, state.mission_count);
+                        }
+                        break;
+                    }
+                    case KS_MSG_HEARTBEAT:
+                    {
+                        /* DO-362A §2.2.4 (Bug #2 fix): GCS heartbeat carries failsafe
+                         * parameters. Update g_failsafe_action and g_failsafe_timeout_s
+                         * so the UAV honours the GCS-commanded lost-link behaviour.
+                         * Note: last_gcs_msg_time is already reset for ALL packets above. */
+                        ks_heartbeat_t hb;
+                        ks_deserialize_heartbeat(&hb, parse_buf);
+                        if (hb.lost_link_timeout_s > 0)
+                        {
+                            g_failsafe_action    = hb.lost_link_action;
+                            g_failsafe_timeout_s = hb.lost_link_timeout_s;
+                            printf("[DO-362A] GCS failsafe config: action=%u timeout=%us\n",
+                                   g_failsafe_action, g_failsafe_timeout_s);
                         }
                         break;
                     }

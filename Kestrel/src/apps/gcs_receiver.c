@@ -98,6 +98,12 @@ static uint32_t ecdh_retry_count = 0;    // Number of retries
 static uint32_t ecdh_last_send_time = 0; // For exponential backoff
 static uint32_t ecdh_timeout_ms = 5000;  // 5 second timeout
 
+/* DO-362A §2.2.4: Failsafe parameters the GCS commands into the UAV via heartbeat.
+ * Configurable at runtime via --failsafe-action / --failsafe-timeout CLI args.
+ * Defaults match UAV compile-time defaults so the link is self-consistent out-of-box. */
+static uint8_t  g_failsafe_action  = 2;   /* 0=none 1=Land 2=RTL(default) 3=Hover */
+static uint16_t g_failsafe_timeout = 3;   /* seconds of silence before failsafe fires */
+
 // Flight mode name lookup
 static const char *mode_names[] = {
     "MANUAL", "STABILIZE", "ALT_HOLD", "LOITER",
@@ -179,6 +185,7 @@ static void print_menu(void)
     printf("  5: RTL         6: EMERGENCY STOP\n");
     printf("  7: Mode Change 8: Send Waypoint\n");
     printf("  9: Upload Mission (fragmented)\n");
+    printf("  N: Send NPNT Permission Artifact (keys/test_pa.bin)\n");
     printf("  0: Show Menu  Ctrl+C: Quit\n");
     printf(">>> ");
     fflush(stdout);
@@ -641,6 +648,23 @@ int main(int argc, char *argv[])
             continue;
         }
 
+        /* DO-362A: GCS-commanded failsafe configuration */
+        if (strcmp(argv[i], "--failsafe-action") == 0 && i + 1 < argc)
+        {
+            int v = atoi(argv[++i]);
+            if (v >= 0 && v <= 3) g_failsafe_action = (uint8_t)v;
+            else { printf("ERROR: --failsafe-action must be 0..3 (0=none 1=Land 2=RTL 3=Hover)\n"); return 1; }
+            continue;
+        }
+
+        if (strcmp(argv[i], "--failsafe-timeout") == 0 && i + 1 < argc)
+        {
+            int v = atoi(argv[++i]);
+            if (v > 0 && v <= 300) g_failsafe_timeout = (uint16_t)v;
+            else { printf("ERROR: --failsafe-timeout must be 1..300 seconds\n"); return 1; }
+            continue;
+        }
+
         if (argv[i][0] != '-')
         {
             uav_ip = argv[i];
@@ -649,7 +673,10 @@ int main(int argc, char *argv[])
 
     if (argc < 2)
     {
-        printf("Usage: %s <uav_ip> [--auto-soak] [--send-port <port>] [--listen-port <port>]\n", argv[0]);
+        printf("Usage: %s <uav_ip> [--auto-soak]\n", argv[0]);
+        printf("               [--failsafe-action <0-3>]   0=none 1=Land 2=RTL 3=Hover\n");
+        printf("               [--failsafe-timeout <secs>] seconds before failsafe fires\n");
+        printf("               [--send-port <port>] [--listen-port <port>]\n");
         printf("No IP provided, defaulting to 127.0.0.1\n\n");
     }
 
@@ -778,6 +805,7 @@ int main(int argc, char *argv[])
     uint8_t parse_output[512];
     uint32_t last_telem_print = 0;
     uint32_t loop_counter = 0;
+    uint32_t last_gcs_hb_send_ms = 0; /* DO-362A: GCS->UAV heartbeat tracker */
 
     // Main loop
     while (1)
@@ -972,6 +1000,47 @@ int main(int argc, char *argv[])
             case '0':
                 print_menu();
                 break;
+            case 'N':
+            case 'n':
+            {
+                /* DGCA NPNT: Send pre-generated Permission Artifact to UAV.
+                 * Generate keys/test_pa.bin first with:  python scripts/npnt_test_pa.py */
+                printf("\n--- Sending NPNT Permission Artifact ---\n");
+                FILE *f_pa = fopen("keys/test_pa.bin", "rb");
+                if (!f_pa)
+                {
+                    printf("[NPNT] ERROR: keys/test_pa.bin not found.\n");
+                    printf("[NPNT] Run: python scripts/npnt_test_pa.py  to generate it.\n");
+                    break;
+                }
+                uint8_t pa_raw[82];
+                if (fread(pa_raw, 1, 82, f_pa) != 82)
+                {
+                    printf("[NPNT] ERROR: test_pa.bin is malformed (expected 82 bytes).\n");
+                    fclose(f_pa);
+                    break;
+                }
+                fclose(f_pa);
+
+                ks_header_t pa_hdr = {0};
+                pa_hdr.payload_len   = 82;
+                pa_hdr.priority      = KS_PRIO_HIGH;
+                pa_hdr.stream_type   = KS_STREAM_NPNT;
+                pa_hdr.encrypted     = true;
+                pa_hdr.sequence      = cmd_sequence++;
+                pa_hdr.sys_id        = 255;
+                pa_hdr.comp_id       = 0;
+                pa_hdr.target_sys_id = 1;
+                pa_hdr.msg_id        = KS_MSG_NPNT_PA;
+
+                int sent = send_command_packet(cmd_sock, &uav_cmd_addr, &pa_hdr, pa_raw,
+                                               &pool, &g_session, &crypto_ctx);
+                if (sent > 0)
+                    printf("[NPNT] Permission Artifact sent (%d bytes). UAV will verify.\n", sent);
+                else
+                    printf("[NPNT] ERROR: Could not send PA (session not ready?).\n");
+                break;
+            }
             default:
                 break;
             }
@@ -982,6 +1051,42 @@ int main(int argc, char *argv[])
         if (ecdh_state == KS_ECDH_ESTABLISHED)
         {
             process_sliding_window(cmd_sock, &uav_cmd_addr, &pool, &g_session, &crypto_ctx);
+        }
+
+        /* DO-362A §2.2.4 (Bug #3 fix): GCS sends its own heartbeat to the UAV
+         * carrying g_failsafe_action / g_failsafe_timeout so the UAV can update
+         * g_failsafe_action and g_failsafe_timeout_s at runtime. Transmitted at
+         * 0.5 Hz (every 2 s) — fast enough to reach UAV well within any >3 s timeout. */
+        if (ecdh_state == KS_ECDH_ESTABLISHED)
+        {
+            uint32_t now_hb = get_time_ms();
+            if (now_hb - last_gcs_hb_send_ms >= 2000)
+            {
+                ks_heartbeat_t gcs_hb = {0};
+                gcs_hb.system_status       = 0x04;             /* GCS Active */
+                gcs_hb.system_type         = 0xFF;             /* GCS system type */
+                gcs_hb.base_mode           = 0x01;
+                gcs_hb.lost_link_action    = g_failsafe_action;
+                gcs_hb.lost_link_timeout_s = g_failsafe_timeout;
+
+                uint8_t hb_payload[16];
+                int hb_len = ks_serialize_heartbeat(&gcs_hb, hb_payload);
+
+                ks_header_t hb_hdr = {0};
+                hb_hdr.payload_len   = hb_len;
+                hb_hdr.priority      = KS_PRIO_NORMAL;
+                hb_hdr.stream_type   = KS_STREAM_HEARTBEAT;
+                hb_hdr.encrypted     = false; /* KS_ENCRYPT_NEVER for HEARTBEAT */
+                hb_hdr.sequence      = cmd_sequence++;
+                hb_hdr.sys_id        = 255;   /* GCS system ID */
+                hb_hdr.comp_id       = 0;
+                hb_hdr.target_sys_id = 1;     /* UAV */
+                hb_hdr.msg_id        = KS_MSG_HEARTBEAT;
+
+                send_packet_direct(cmd_sock, &uav_cmd_addr, &hb_hdr, hb_payload,
+                                   &pool, NULL, &crypto_ctx);
+                last_gcs_hb_send_ms = now_hb;
+            }
         }
 
         // --- Receive telemetry + ACKs (non-blocking) ---

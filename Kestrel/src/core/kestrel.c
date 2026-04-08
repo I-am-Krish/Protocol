@@ -52,18 +52,24 @@ void ks_crc_accumulate(uint8_t data, uint16_t *crcAccum)
     *crcAccum = (*crcAccum >> 8) ^ (tmp << 8) ^ (tmp << 3) ^ (tmp >> 4);
 }
 
-/* CRC seed lookup table indexed by message ID (0 = unknown) */
+/* CRC seed lookup table — indexed DIRECTLY by msg_id.
+ * ks_get_crc_seed(msg_id) returns ks_crc_seed_table[msg_id].
+ * KS_MSG_HEARTBEAT=0x001 → index 1; index 0 (msg_id=0x000) is unused padding.
+ *
+ * NOTE: The original comments were off-by-one (labelled as 0x00..0x09 for rows
+ * 0..9, implying HEARTBEAT was at index 0, but the lookup uses msg_id directly).
+ * Comments below reflect the TRUE msg_id-to-index mapping. */
 static const uint8_t ks_crc_seed_table[] = {
-    /* 0x00 HEARTBEAT    */ 50,
-    /* 0x01 ATTITUDE     */ 39,
-    /* 0x02 GPS_RAW      */ 24,
-    /* 0x03 BATTERY      */ 154,
-    /* 0x04 RC_INPUT     */ 89,
-    /* 0x05 (unused)     */ 0,
-    /* 0x06 CMD          */ 217,
-    /* 0x07 CMD_ACK      */ 143,
-    /* 0x08 MODE_CHANGE  */ 178,
-    /* 0x09 MISSION_ITEM */ 62,
+    /* idx[0] msg_id=0x000 (unused — direct-index padding)         */  0,
+    /* idx[1] KS_MSG_HEARTBEAT  0x001  v2 10-byte DO-362A format   */ 117, /* was 39 — changed to signal 3-byte failsafe extension */
+    /* idx[2] KS_MSG_ATTITUDE   0x002                              */  24,
+    /* idx[3] KS_MSG_GPS_RAW    0x003                              */ 154,
+    /* idx[4] KS_MSG_BATTERY    0x004                              */  89,
+    /* idx[5] KS_MSG_RC_INPUT   0x005                              */   0,
+    /* idx[6] KS_MSG_CMD        0x006                              */ 217,
+    /* idx[7] KS_MSG_CMD_ACK    0x007                              */ 143,
+    /* idx[8] KS_MSG_MODE_CHANGE  0x008                            */ 178,
+    /* idx[9] KS_MSG_MISSION_ITEM 0x009                            */  62,
 };
 #define KS_CRC_SEED_TABLE_SIZE (sizeof(ks_crc_seed_table) / sizeof(ks_crc_seed_table[0]))
 
@@ -1479,6 +1485,20 @@ ks_encrypt_policy_t ks_get_encrypt_policy(uint16_t msg_id)
     case KS_MSG_KEY_EXCHANGE_ACK:
         return KS_ENCRYPT_NEVER;
     case KS_MSG_BATCH:
+        return KS_ENCRYPT_OPTIONAL;
+    /* --- Compliance Extension Message Policies --- */
+    /* ASTM F3411: Remote ID MUST be open broadcast — NEVER encrypt */
+    case KS_MSG_RID_BASIC_ID:
+        return KS_ENCRYPT_NEVER;
+    case KS_MSG_RID_LOCATION:
+        return KS_ENCRYPT_NEVER;
+    /* DGCA NPNT: Permission Artifacts are regulatory documents — ALWAYS encrypt */
+    case KS_MSG_NPNT_PA:
+        return KS_ENCRYPT_ALWAYS;
+    case KS_MSG_NPNT_STATUS:
+        return KS_ENCRYPT_ALWAYS;
+    /* DO-362A: Link status metrics — optional encryption */
+    case KS_MSG_LINK_STATUS:
         return KS_ENCRYPT_OPTIONAL;
     default:
         return KS_ENCRYPT_OPTIONAL;

@@ -82,6 +82,7 @@
 ✅ **x86 AVX2 Support** - 4x crypto speedup on modern Intel/AMD processors
 
 ### Phase 4 & 5 Aerospace Compliance
+
 ✅ **DO-362A Lost-Link** - GCS-configurable failsafe injection via Heartbeat  
 ✅ **DO-377A BLOS Latency** - Sliding window pipelines handling satellite RTT margins  
 ✅ **DGCA NPNT Validations** - Cryptographic NO-PERMISSION-NO-TAKEOFF arming gates via Ed25519  
@@ -96,12 +97,12 @@
 
 #### Core Protocol
 
-| File                      | Description                                     |
-| ------------------------- | ----------------------------------------------- |
-| `Protocol/kestrel.h`      | Core API, structures, and constants             |
-| `Protocol/kestrel.c`      | Encoding/decoding implementation with AEAD      |
+| File                           | Description                                                |
+| ------------------------------ | ---------------------------------------------------------- |
+| `Protocol/kestrel.h`           | Core API, structures, and constants                        |
+| `Protocol/kestrel.c`           | Encoding/decoding implementation with AEAD                 |
 | `Protocol/kestrel_legion.c/.h` | Legion protocol extension for large networks (8,192 nodes) |
-| `Protocol/monocypher.c/h` | Portable ChaCha20-Poly1305 cryptography library |
+| `Protocol/monocypher.c/h`      | Portable ChaCha20-Poly1305 cryptography library            |
 
 #### Phase 2 Optimizations
 
