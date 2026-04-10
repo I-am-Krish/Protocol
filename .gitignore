@@ -12,6 +12,7 @@
 *.bak
 *.ps1
 *.sh
+*.ts
 *.text
 *.txt
 
@@ -49,15 +50,15 @@ Thumbs.db
 __pycache__/
 
 # === PROJECT SUBDIRECTORIES (PRIVACY/CLEANLINESS) ===
-Protocol/bin/
-Protocol/keys/
-Protocol/testing/logs/
-Protocol/_vm_keygen_tmp/
-Protocol/wireshark/
+Kestrel/bin/
+Kestrel/keys/
+Kestrel/testing/logs/
+Kestrel/_vm_keygen_tmp/
+Kestrel/wireshark/
+Kestrel/testing/crash-*
+Kestrel/testing/native_fuzzer
 
 # === Others ===
-Protocol/Protocol/testing/crash-71650fa854397f3fb535f742ed25af6cc135a3de
-Protocol/Protocol/testing/native_fuzzer
 msg_editor.py
 seq_editor.py
 
