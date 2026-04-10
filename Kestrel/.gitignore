@@ -12,6 +12,7 @@
 *.bak
 *.ps1
 *.sh
+*.ts
 
 # === DOCUMENTATION (INTERNAL USE ONLY - DO NOT UPLOAD) ===
 Documentation/

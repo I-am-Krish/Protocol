@@ -1380,6 +1380,17 @@ int main(int argc, char *argv[])
                     fflush(stdout);
                     break;
                 }
+                case KS_MSG_VIDEO_TS:
+                {
+                    // STANAG 4609 MPEG-TS packet
+                    FILE *v_out = fopen("video_out.ts", "ab");
+                    if (v_out) {
+                        fwrite(parse_output, 1, payload_len, v_out);
+                        fclose(v_out);
+                    }
+                    printf("[STANAG 4609] MPEG-TS Video block received (%u bytes)\n", payload_len);
+                    break;
+                }
                 default:
                     // Other telemetry silently received
                     break;

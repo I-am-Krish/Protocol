@@ -108,6 +108,8 @@ typedef struct
 /* ASTM F3411 Remote ID */
 #define KS_MSG_RID_BASIC_ID    0x030 /* F3411 Basic ID broadcast frame          */
 #define KS_MSG_RID_LOCATION    0x031 /* F3411 Location/Vector broadcast frame   */
+/* STANAG 4609 Video / MISB ST 0601 */
+#define KS_MSG_VIDEO_TS        0x042 /* MPEG-TS stream carrying Video + KLV     */
 
 /* Command IDs (used in ks_command_t.command_id) */
 #define KS_CMD_ARM 0x0001       /* Arm motors */

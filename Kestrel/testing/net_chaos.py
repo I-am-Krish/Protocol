@@ -3,6 +3,7 @@ import select
 import random
 import time
 import threading
+import argparse
 
 # We create two distinct links
 # Link 1 (Telemetry/ACKs): UAV sends to 14550 -> Proxy(14550) -> forwards to GCS(14552)
@@ -15,11 +16,26 @@ UAV_REAL_CMD_PORT = 14553
 
 IP_ADDR = "127.0.0.1"
 
-# Chaos Parameters
-DROP_PROBABILITY = 0.15     # 15% packet loss
-DUP_PROBABILITY = 0.05      # 5% packet duplication
-LATENCY_MIN_MS = 10         # Minimum delay
-LATENCY_MAX_MS = 250        # Maximum delay (can cause out-of-order)
+# Parse mode argument
+_parser = argparse.ArgumentParser(description="Kestrel Network Chaos Proxy")
+_parser.add_argument("--mode", choices=["chaos", "blos"], default="chaos",
+                     help="chaos=15pct loss 10-250ms (default) | blos=2pct loss 590-650ms (DO-377A satellite)")
+_args, _ = _parser.parse_known_args()
+
+if _args.mode == "blos":
+    # DO-377A BLOS / satellite simulation: low loss, very high latency
+    DROP_PROBABILITY = 0.02
+    DUP_PROBABILITY  = 0.01
+    LATENCY_MIN_MS   = 590
+    LATENCY_MAX_MS   = 650
+    _MODE_LABEL = "BLOS/Satellite (DO-377A)"
+else:
+    # Default terrestrial chaos
+    DROP_PROBABILITY = 0.15     # 15% packet loss
+    DUP_PROBABILITY  = 0.05     # 5% packet duplication
+    LATENCY_MIN_MS   = 10       # Minimum delay
+    LATENCY_MAX_MS   = 250      # Maximum delay (can cause out-of-order)
+    _MODE_LABEL = "Terrestrial Chaos"
 
 # Thread-safe queue list for delayed packets
 delayed_packets = []
@@ -27,9 +43,10 @@ lock = threading.Lock()
 
 def chaotic_forwarder():
     print(f"--- Kestrel Network Chaos Proxy Starting ---")
+    print(f"Mode: {_MODE_LABEL}")
     print(f"Intercepting Telemetry on {IP_ADDR}:{PROXY_TELEM_PORT} -> Forwarding to {IP_ADDR}:{GCS_REAL_TELEM_PORT}")
     print(f"Intercepting Commands  on {IP_ADDR}:{PROXY_CMD_PORT} -> Forwarding to {IP_ADDR}:{UAV_REAL_CMD_PORT}")
-    print(f"Parameters: {DROP_PROBABILITY*100}% Drop | {DUP_PROBABILITY*100}% Duplicate | Latency {LATENCY_MIN_MS}-{LATENCY_MAX_MS} ms")
+    print(f"Parameters: {DROP_PROBABILITY*100:.0f}% Drop | {DUP_PROBABILITY*100:.0f}% Duplicate | Latency {LATENCY_MIN_MS}-{LATENCY_MAX_MS} ms")
     print("-------------------------------------------\n")
 
     # Socket bound to PROXY_IP to receive traffic from UAV targeting GCS (14550)

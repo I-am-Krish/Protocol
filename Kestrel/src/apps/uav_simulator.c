@@ -6,6 +6,7 @@
  * Sends command ACKs on UDP port 14552 (UAV -> GCS)
  */
 
+#include "kestrel_video.h"
 #include "kestrel.h"
 #include "kestrel_fast.h"
 #include "kestrel_rid.h"
@@ -422,6 +423,9 @@ int main(int argc, char *argv[])
 
     ks_crypto_ctx_t crypto_ctx;
     ks_crypto_ctx_init(&crypto_ctx);
+
+    ks_ts_mux_t ts_mux;
+    ks_ts_mux_init(&ts_mux);
 
     printf("Crypto: Software | Memory Pool: %d x %d bytes\n\n",
            KS_MEMPOOL_NUM_BUFFERS, KS_MEMPOOL_BUFFER_SIZE);
@@ -1268,6 +1272,68 @@ int main(int argc, char *argv[])
                     sendto(telem_sock, (char *)p_buf, p_len, 0, (struct sockaddr *)&gcs_telem_addr, sizeof(gcs_telem_addr));
                     ks_mempool_free(&pool, p_buf);
                     packets_sent++;
+                }
+            }
+        }
+
+        // STANAG 4609 MPEG-TS Video (1 Hz)
+        if (loop % 10 == 0)
+        {
+            ks_klv_uav_state_t klv_state = {
+                .timestamp_us = (uint64_t)time(NULL) * 1000000ULL,
+                .mission_id   = "KESTREL-SORTIE-001",
+                .heading_deg  = state.yaw < 0 ? state.yaw + 360.0f : state.yaw,
+                .pitch_deg    = state.pitch,
+                .roll_deg     = state.roll,
+                .lat_e7       = state.lat,
+                .lon_e7       = state.lon,
+                .alt_msl_m    = state.alt / 1000.0f,
+                .speed_mps    = 0.0f,
+            };
+
+            uint8_t klv_buf[256];
+            int klv_len = ks_klv_build_st0601(klv_buf, sizeof(klv_buf), &klv_state);
+
+            if (klv_len > 0)
+            {
+                uint8_t ts_buf[KS_TS_PACKET_SIZE * 3 + KS_MAX_PAYLOAD_SIZE]; // big enough
+                int ts_len = 0;
+
+                // Provide PAT and PMT (at 1Hz this is good practice for TS compliance)
+                ts_len += ks_ts_mux_write_pat_pmt(&ts_mux, ts_buf);
+
+                // Provide KLV metadata PES packet
+                ts_len += ks_ts_mux_write_pes(&ts_mux, KS_TS_PID_KLV, 0xBD, klv_state.timestamp_us, klv_buf, klv_len, &ts_buf[ts_len], sizeof(ts_buf) - ts_len);
+
+                // Provide dummy H.264 video frame PES packet (I-frame NAL unit mock)
+                uint8_t dummy_h264[] = { 0x00, 0x00, 0x00, 0x01, 0x65, 0x11, 0x22, 0x33, 0x44 };
+                ts_len += ks_ts_mux_write_pes(&ts_mux, KS_TS_PID_VIDEO, 0xE0, klv_state.timestamp_us, dummy_h264, sizeof(dummy_h264), &ts_buf[ts_len], sizeof(ts_buf) - ts_len);
+
+                // Fragment the output into multiple kestrel payloads if larger than KS_MAX_PAYLOAD_SIZE minus header size approx
+                // KS_MAX_PAYLOAD_SIZE is 512. We can send 2 TS packets (376 bytes) at once.
+                int offset = 0;
+                while (offset < ts_len) {
+                    int chunk = ts_len - offset;
+                    if (chunk > 376) chunk = 376;
+                    
+                    ks_header_t hdr_ts = {0};
+                    hdr_ts.payload_len = chunk;
+                    hdr_ts.priority = KS_PRIO_NORMAL;
+                    hdr_ts.stream_type = KS_STREAM_VIDEO;
+                    hdr_ts.encrypted = false; 
+                    hdr_ts.sequence = state.sequence++;
+                    hdr_ts.sys_id = 1;
+                    hdr_ts.comp_id = 1;
+                    hdr_ts.msg_id = KS_MSG_VIDEO_TS;
+
+                    uint8_t *p_buf = NULL;
+                    int p_len = ks_pack_fast(&pool, &hdr_ts, &ts_buf[offset], g_session_ready ? &g_session : NULL, &crypto_ctx, &p_buf);
+                    if (p_len > 0 && p_buf) {
+                        sendto(telem_sock, (char *)p_buf, p_len, 0, (struct sockaddr *)&gcs_telem_addr, sizeof(gcs_telem_addr));
+                        ks_mempool_free(&pool, p_buf);
+                        packets_sent++;
+                    }
+                    offset += chunk;
                 }
             }
         }

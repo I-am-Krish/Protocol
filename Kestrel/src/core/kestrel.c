@@ -995,7 +995,7 @@ void ks_nonce_set_counter(ks_nonce_state_t *state, uint32_t counter)
     if (!state)
         return;
     state->counter = counter;
-    state->initialized = 1; // Mark as initialized since counter is explicitly set
+    state->initialized = 1; // Mark as initialized since counter is explicitly set 
 }
 
 void ks_nonce_generate(ks_nonce_state_t *state, uint8_t nonce[8])
@@ -1499,6 +1499,9 @@ ks_encrypt_policy_t ks_get_encrypt_policy(uint16_t msg_id)
         return KS_ENCRYPT_ALWAYS;
     /* DO-362A: Link status metrics — optional encryption */
     case KS_MSG_LINK_STATUS:
+        return KS_ENCRYPT_OPTIONAL;
+    /* STANAG 4609: MPEG-TS video and metadata streams — optional encryption */
+    case KS_MSG_VIDEO_TS:
         return KS_ENCRYPT_OPTIONAL;
     default:
         return KS_ENCRYPT_OPTIONAL;
