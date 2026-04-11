@@ -2,24 +2,24 @@
 
 **Kestrel** is a high-performance **binary communication protocol** purpose-built for **UAV systems**. It minimizes packet overhead and maximizes reliability on lossy radio links with built-in encryption, message routing, and integrity checking. The reference implementation in this repository is provided under the historical `kestrel.*` filenames. Features comprehensive optimizations including zero-copy parsing, hardware-accelerated encryption, and advanced compression.
 
-### ✨ Key Achievements
+### Key Achievements
 
-- ✅ **Full ChaCha20-Poly1305 AEAD Encryption** - Complete implementation with 128-bit MAC authentication
-- ✅ **ARM NEON Hardware Acceleration** - 4x crypto speedup on ARM platforms with SIMD
-- ✅ **Phase 2 Optimizations** - Zero-copy parser (2x faster) + O(1) memory pool
-- ✅ **Phase 3 Advanced Features** - Delta encoding (57% bandwidth savings), LZ4 compression, Reed-Solomon FEC
-- ✅ **Phase 4 & 5 Aerospace Compliance** - RTCA DO-362A, DO-377A, ASTM F3411 Remote ID, and DGCA NPNT Arming Gates implemented natively in the protocol
-- ✅ **ECDH Handshake Hardening** - OS CSPRNG for ephemeral X25519 keys and BLAKE2b-bound signatures with protocol label
-- ✅ **82.8% Bandwidth Reduction** - Combined optimizations reduce telemetry from 3.68 kbps to 0.63 kbps
-- ✅ **Comprehensive Validation Tooling** - Unit-style C tests, soak tests, fuzzing, adversarial link tests, TS validation, and VM deployment assets are included in-repo
-- ✅ **Production-Ready Code** - All critical bugs identified and fixed through rigorous testing
-- ✅ **Expanded Message Surface** - Telemetry, command/ACK, mode change, mission, key exchange, batching, NPNT, Remote ID, and MPEG-TS/KLV transport are implemented
-- ✅ **Robust Parser** - Byte-by-byte state machine with full error handling
-- ✅ **Secure Nonce Management** - Cryptographically secure nonce generation prevents replay attacks
-- ✅ **Fragmentation and Reassembly** - Fragment splitting plus receiver-side reassembly APIs are available for large payloads
-- ✅ **Kestrel Legion Variant** - Expanded 13-bit addressing space for large-scale device networks (up to 8,192 logic nodes) with robust replay defense
+- **Full ChaCha20-Poly1305 AEAD Encryption** - Complete implementation with 128-bit MAC authentication
+- **ARM NEON Hardware Acceleration** - 4x crypto speedup on ARM platforms with SIMD
+- **Phase 2 Optimizations** - Zero-copy parser (2x faster) + O(1) memory pool
+- **Phase 3 Advanced Features** - Delta encoding (57% bandwidth savings), LZ4 compression, Reed-Solomon FEC
+- **Phase 4 & 5 Aerospace Compliance** - RTCA DO-362A, DO-377A, ASTM F3411 Remote ID, and DGCA NPNT Arming Gates implemented natively in the protocol
+- **ECDH Handshake Hardening** - OS CSPRNG for ephemeral X25519 keys and BLAKE2b-bound signatures with protocol label
+- **82.8% Bandwidth Reduction** - Combined optimizations reduce telemetry from 3.68 kbps to 0.63 kbps
+- **Comprehensive Validation Tooling** - Unit-style C tests, soak tests, fuzzing, adversarial link tests, TS validation, and VM deployment assets are included in-repo
+- **Production-Ready Code** - All critical bugs identified and fixed through rigorous testing
+- **Expanded Message Surface** - Telemetry, command/ACK, mode change, mission, key exchange, batching, NPNT, Remote ID, and MPEG-TS/KLV transport are implemented
+- **Robust Parser** - Byte-by-byte state machine with full error handling
+- **Secure Nonce Management** - Cryptographically secure nonce generation prevents replay attacks
+- **Fragmentation and Reassembly** - Fragment splitting plus receiver-side reassembly APIs are available for large payloads
+- **Kestrel Legion Variant** - Expanded 13-bit addressing space for large-scale device networks (up to 8,192 logic nodes) with robust replay defense
 
-### 🚀 Performance Summary
+### Performance Summary
 
 | Metric            | Baseline  | Optimized | Improvement                |
 | ----------------- | --------- | --------- | -------------------------- |
@@ -29,7 +29,7 @@
 | **Memory Alloc**  | 50 µs     | <1 µs     | **50x faster** (O(1) pool) |
 | **Total Latency** | 500 µs    | 176 µs    | **2.8x faster**            |
 
-### 📊 Test Coverage
+### Test Coverage
 
 **Validation assets include unit-style C tests, soak tests, fuzzing, chaos/adversarial harnesses, TS validators, and VM deployment bundles**
 
@@ -51,39 +51,39 @@
 
 ### Core Protocol
 
-✅ **Compact Headers** - 8-19 bytes on the wire before payload, depending on command targeting, fragmentation, and encryption metadata  
-✅ **Session-Managed Encryption** - ChaCha20-Poly1305 AEAD with session-bound nonce lifecycle and full 128-bit MAC authentication  
-✅ **Reliable** - CRC-16 integrity checking plus AEAD MAC prevents tampering  
-✅ **Flexible Routing** - System/component addressing with broadcast support  
-✅ **Priority-based QoS** - 4 priority levels for time-critical messages  
-✅ **Stream-Parseable** - Byte-by-byte state machine ideal for UART  
-✅ **Command and Control Surface** - Command, ACK, mode change, mission item, key exchange, and batch message types are implemented  
-✅ **Fragmentation and Reassembly** - Handle payloads beyond a single fragment and reconstruct them on the receiver side  
-✅ **Production-Ready Security** - Secure nonce generation plus replay protection windows prevent nonce reuse and packet replays
+**Compact Headers** - 8-19 bytes on the wire before payload, depending on command targeting, fragmentation, and encryption metadata  
+**Session-Managed Encryption** - ChaCha20-Poly1305 AEAD with session-bound nonce lifecycle and full 128-bit MAC authentication  
+**Reliable** - CRC-16 integrity checking plus AEAD MAC prevents tampering  
+**Flexible Routing** - System/component addressing with broadcast support  
+**Priority-based QoS** - 4 priority levels for time-critical messages  
+**Stream-Parseable** - Byte-by-byte state machine ideal for UART  
+**Command and Control Surface** - Command, ACK, mode change, mission item, key exchange, and batch message types are implemented  
+**Fragmentation and Reassembly** - Handle payloads beyond a single fragment and reconstruct them on the receiver side  
+**Production-Ready Security** - Secure nonce generation plus replay protection windows prevent nonce reuse and packet replays
 
 ### Phase 2 Performance Optimizations
 
-✅ **Zero-Copy Parser** - 2x parsing speed with direct memory access  
-✅ **Memory Pool** - O(1) deterministic allocation for real-time systems  
-✅ **Hardware Crypto Detection** - Automatic SIMD backend selection  
-✅ **Crypto Context Caching** - 30% speedup for burst transmissions  
-✅ **Selective Encryption** - 60% bandwidth reduction for public telemetry
+**Zero-Copy Parser** - 2x parsing speed with direct memory access  
+**Memory Pool** - O(1) deterministic allocation for real-time systems  
+**Hardware Crypto Detection** - Automatic SIMD backend selection  
+**Crypto Context Caching** - 30% speedup for burst transmissions  
+**Selective Encryption** - 60% bandwidth reduction for public telemetry
 
 ### Phase 3 Advanced Features
 
-✅ **Delta Encoding** - 57% bandwidth savings for GPS/attitude telemetry  
-✅ **LZ4 Compression** - Fast compression for repetitive data  
-✅ **Reed-Solomon FEC** - Recover from packet loss without retransmission  
-✅ **ARM NEON Acceleration** - 4x crypto speedup on ARM Cortex-A/Apple Silicon  
-✅ **x86 AVX2 Support** - 4x crypto speedup on modern Intel/AMD processors
+**Delta Encoding** - 57% bandwidth savings for GPS/attitude telemetry  
+**LZ4 Compression** - Fast compression for repetitive data  
+**Reed-Solomon FEC** - Recover from packet loss without retransmission  
+**ARM NEON Acceleration** - 4x crypto speedup on ARM Cortex-A/Apple Silicon  
+**x86 AVX2 Support** - 4x crypto speedup on modern Intel/AMD processors
 
 ### Phase 4 & 5 Aerospace Compliance
 
-✅ **DO-362A Lost-Link** - GCS-configurable failsafe injection via Heartbeat  
-✅ **DO-377A BLOS Latency** - Sliding window pipelines handling satellite RTT margins  
-✅ **DGCA NPNT Validations** - Cryptographic NO-PERMISSION-NO-TAKEOFF arming gates via Ed25519  
-✅ **ASTM F3411 Remote ID** - Unencrypted explicit packet broadcasting support for tracking compliance  
-✅ **STANAG / MISB Video Hooks** - MPEG-TS muxing with MISB ST 0601 KLV helpers for video metadata transport
+**DO-362A Lost-Link** - GCS-configurable failsafe injection via Heartbeat  
+**DO-377A BLOS Latency** - Sliding window pipelines handling satellite RTT margins  
+**DGCA NPNT Validations** - Cryptographic NO-PERMISSION-NO-TAKEOFF arming gates via Ed25519  
+**ASTM F3411 Remote ID** - Unencrypted explicit packet broadcasting support for tracking compliance  
+**STANAG / MISB Video Hooks** - MPEG-TS muxing with MISB ST 0601 KLV helpers for video metadata transport
 
 ### Current Implementation Snapshot
 
@@ -231,7 +231,7 @@ Avg parse time: 4 us/packet
 Memory pool peak usage: 1/32 buffers
 ```
 
-> ✅ Successfully tested over WiFi between two Windows PCs with zero packet loss and full AEAD encryption.
+> Successfully tested over WiFi between two Windows PCs with zero packet loss and full AEAD encryption.
 
 ### Integrating into Your Code
 
@@ -924,7 +924,7 @@ typedef enum {
 
 ## Security Considerations
 
-### ✅ Implemented Protections
+### Implemented Protections
 
 1. **Full AEAD Encryption:** ChaCha20-Poly1305 with 128-bit MAC authentication
 2. **Header Authentication:** Entire packet header authenticated as Additional Data (AAD)
@@ -965,11 +965,11 @@ The protocol now features production-grade authenticated encryption:
 
 **Security Posture:**
 
-- ✅ No replay attacks (hybrid nonce strategy)
-- ✅ No tampering (AEAD MAC verification)
-- ✅ No bit-flip attacks (CRC-16 + Poly1305)
-- ✅ No buffer overflows (bounds checking)
-- ✅ No NULL dereferences (comprehensive validation)
+- No replay attacks (hybrid nonce strategy)
+- No tampering (AEAD MAC verification)
+- No bit-flip attacks (CRC-16 + Poly1305)
+- No buffer overflows (bounds checking)
+- No NULL dereferences (comprehensive validation)
 
 ### ⚠️ Production Recommendations
 
