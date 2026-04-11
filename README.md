@@ -2,8 +2,6 @@
 
 **Kestrel** is a high-performance **binary communication protocol** purpose-built for **UAV systems**. It minimizes packet overhead and maximizes reliability on lossy radio links with built-in encryption, message routing, and integrity checking. The reference implementation in this repository is provided under the historical `kestrel.*` filenames. Features comprehensive optimizations including zero-copy parsing, hardware-accelerated encryption, and advanced compression.
 
-**Current Version:** 1.2.9 (March 2026)
-
 ### ✨ Key Achievements
 
 - ✅ **Full ChaCha20-Poly1305 AEAD Encryption** - Complete implementation with 128-bit MAC authentication
@@ -13,12 +11,12 @@
 - ✅ **Phase 4 & 5 Aerospace Compliance** - RTCA DO-362A, DO-377A, ASTM F3411 Remote ID, and DGCA NPNT Arming Gates implemented natively in the protocol
 - ✅ **ECDH Handshake Hardening** - OS CSPRNG for ephemeral X25519 keys and BLAKE2b-bound signatures with protocol label
 - ✅ **82.8% Bandwidth Reduction** - Combined optimizations reduce telemetry from 3.68 kbps to 0.63 kbps
-- ✅ **Comprehensive Test Suite** - 33 tests across 10 categories with 100% pass rate
+- ✅ **Comprehensive Validation Tooling** - Unit-style C tests, soak tests, fuzzing, adversarial link tests, TS validation, and VM deployment assets are included in-repo
 - ✅ **Production-Ready Code** - All critical bugs identified and fixed through rigorous testing
-- ✅ **5 Message Types Implemented** - Heartbeat, Attitude, GPS, Battery, RC Input
+- ✅ **Expanded Message Surface** - Telemetry, command/ACK, mode change, mission, key exchange, batching, NPNT, Remote ID, and MPEG-TS/KLV transport are implemented
 - ✅ **Robust Parser** - Byte-by-byte state machine with full error handling
 - ✅ **Secure Nonce Management** - Cryptographically secure nonce generation prevents replay attacks
-- ✅ **Fragmentation Support** - Handle payloads up to 4095 bytes with built-in fragmentation
+- ✅ **Fragmentation and Reassembly** - Fragment splitting plus receiver-side reassembly APIs are available for large payloads
 - ✅ **Kestrel Legion Variant** - Expanded 13-bit addressing space for large-scale device networks (up to 8,192 logic nodes) with robust replay defense
 
 ### 🚀 Performance Summary
@@ -33,22 +31,19 @@
 
 ### 📊 Test Coverage
 
-**33 Tests | 100% Pass Rate**
+**Validation assets include unit-style C tests, soak tests, fuzzing, chaos/adversarial harnesses, TS validators, and VM deployment bundles**
 
-| Category                      | Tests | Focus                                          |
-| ----------------------------- | ----- | ---------------------------------------------- |
-| Serialization/Deserialization | 5     | Message packing/unpacking round-trips          |
-| AEAD Encryption               | 1     | ChaCha20-Poly1305 encrypt/decrypt              |
-| MAC Verification              | 3     | Tamper detection (payload, header, wrong key)  |
-| Parser State Machine          | 3     | Multi-packet streams, CRC, SOF handling        |
-| Error Handling                | 2     | NULL pointers, buffer overflow protection      |
-| CRC                           | 2     | Known vectors, empty messages                  |
-| Nonce Management              | 4     | Initialization, uniqueness, counter tracking   |
-| Replay Protection             | 5     | Sequence tracking, duplicates, rollover        |
-| Fragmentation                 | 5     | Fragment encoding, multi-part messages         |
-| Edge Cases                    | 3     | Zero-length payloads, max sequence, priorities |
+| Asset | Focus |
+| ----- | ----- |
+| `testing/legion_unit_test.c` | Legion header packing, replay protection, and enlarged memory pool |
+| `testing/packet_size_test.c` | Packet sizing, parser behavior, and boundary cases |
+| `testing/fuzz_parser.c` | Parser hardening under malformed or random inputs |
+| `testing/test_1min.py`, `test_15min.py`, `test_30min.py`, `test_3h.py` | Long-duration soak testing of the GCS/UAV apps |
+| `testing/net_chaos.py`, `testing/adversarial_test.py`, `testing/clean_proxy.py` | Link impairment, corruption, and hostile traffic simulation |
+| `scripts/validate_ts.py` | MPEG-TS PAT/PMT/video/KLV validation |
+| `testing/vm_deploy/*` | Split GCS/UAV deployment bundles for VM or multi-host testing |
 
-**Run tests:** `wsl make test` (Windows) or `make test` (Linux/macOS)
+**Run validation:** build the apps with `make`, compile `make legion_test` for the Legion unit test, then run the Python/C test assets from `Kestrel/testing` and `Kestrel/scripts` as needed for the path you are changing.
 
 ---
 
@@ -56,14 +51,15 @@
 
 ### Core Protocol
 
-✅ **Compact Headers** - 8-16 byte headers with bit-packed fields  
-✅ **Built-in Encryption** - ChaCha20-Poly1305 AEAD with full 128-bit MAC authentication  
+✅ **Compact Headers** - 8-19 bytes on the wire before payload, depending on command targeting, fragmentation, and encryption metadata  
+✅ **Session-Managed Encryption** - ChaCha20-Poly1305 AEAD with session-bound nonce lifecycle and full 128-bit MAC authentication  
 ✅ **Reliable** - CRC-16 integrity checking plus AEAD MAC prevents tampering  
 ✅ **Flexible Routing** - System/component addressing with broadcast support  
 ✅ **Priority-based QoS** - 4 priority levels for time-critical messages  
 ✅ **Stream-Parseable** - Byte-by-byte state machine ideal for UART  
-✅ **Fragmentation Support** - Handle payloads up to 4095 bytes  
-✅ **Production-Ready** - Secure nonce generation prevents replay attacks
+✅ **Command and Control Surface** - Command, ACK, mode change, mission item, key exchange, and batch message types are implemented  
+✅ **Fragmentation and Reassembly** - Handle payloads beyond a single fragment and reconstruct them on the receiver side  
+✅ **Production-Ready Security** - Secure nonce generation plus replay protection windows prevent nonce reuse and packet replays
 
 ### Phase 2 Performance Optimizations
 
@@ -87,7 +83,13 @@
 ✅ **DO-377A BLOS Latency** - Sliding window pipelines handling satellite RTT margins  
 ✅ **DGCA NPNT Validations** - Cryptographic NO-PERMISSION-NO-TAKEOFF arming gates via Ed25519  
 ✅ **ASTM F3411 Remote ID** - Unencrypted explicit packet broadcasting support for tracking compliance  
-✅ **STANAG Hooks** - Reserved structural identifiers for STANAG 4586 and KLV Video extensions
+✅ **STANAG / MISB Video Hooks** - MPEG-TS muxing with MISB ST 0601 KLV helpers for video metadata transport
+
+### Current Implementation Snapshot
+
+- **Core library:** framing, CRC, serialization, AEAD, replay protection, selective encryption, batching, fragmentation, and timed reassembly
+- **Performance modules:** zero-copy parser, memory pool, compression, FEC, delta encoding, SIMD crypto backends, and the Legion large-scale variant
+- **Apps and tooling:** bidirectional UAV/GCS demos, key management helpers, benchmark and example tools, compliance scripts, TS validation, soak tests, and VM deployment copies
 
 ---
 
@@ -99,92 +101,100 @@
 
 | File                           | Description                                                |
 | ------------------------------ | ---------------------------------------------------------- |
-| `Protocol/kestrel.h`           | Core API, structures, and constants                        |
-| `Protocol/kestrel.c`           | Encoding/decoding implementation with AEAD                 |
-| `Protocol/kestrel_legion.c/.h` | Legion protocol extension for large networks (8,192 nodes) |
-| `Protocol/monocypher.c/h`      | Portable ChaCha20-Poly1305 cryptography library            |
+| `Kestrel/src/core/kestrel.h`           | Core API, structures, message IDs, and protocol constants |
+| `Kestrel/src/core/kestrel.c`           | Encoding/decoding, parser, AEAD, nonce/session, fragmentation, and reassembly |
+| `Kestrel/src/core/kestrel_legion.c/.h` | Legion protocol extension for large networks (8,192 nodes) |
+| `Kestrel/src/core/kestrel_keymanager.c/.h` | Session key loading, generation, cleanup, and rotation helpers |
+| `Kestrel/src/core/monocypher.c/h`      | Portable ChaCha20-Poly1305/X25519/Ed25519 cryptography library |
 
 #### Phase 2 Optimizations
 
 | File                      | Description                              |
 | ------------------------- | ---------------------------------------- |
-| `Protocol/kestrel_fast.h` | Zero-copy parser, memory pool APIs       |
-| `Protocol/kestrel_fast.c` | Performance optimization implementations |
+| `Kestrel/src/core/kestrel_fast.h` | Zero-copy parser, memory pool APIs |
+| `Kestrel/src/core/kestrel_fast.c` | Performance optimization implementations |
 
 #### Phase 3 Advanced Features
 
 | File                          | Description                         |
 | ----------------------------- | ----------------------------------- |
-| `Protocol/kestrel_compress.h` | Delta encoding, LZ4, FEC APIs       |
-| `Protocol/kestrel_compress.c` | Compression and FEC implementations |
+| `Kestrel/src/core/kestrel_compress.h` | Delta encoding, LZ4, FEC APIs |
+| `Kestrel/src/core/kestrel_compress.c` | Compression and FEC implementations |
 
 #### Hardware Acceleration
 
 | File                           | Description                    |
 | ------------------------------ | ------------------------------ |
-| `Protocol/kestrel_hw_crypto.h` | ARM NEON, x86 SIMD crypto APIs |
-| `Protocol/kestrel_hw_crypto.c` | Hardware-accelerated ChaCha20  |
+| `Kestrel/src/core/kestrel_hw_crypto.h` | ARM NEON, x86 SIMD crypto APIs |
+| `Kestrel/src/core/kestrel_hw_crypto.c` | Hardware-accelerated ChaCha20 |
+| `Kestrel/src/core/kestrel_rid.c/.h`    | ASTM F3411 Remote ID helpers |
+| `Kestrel/src/core/kestrel_video.c/.h`  | MISB ST 0601 KLV encoder and MPEG-TS muxer |
 
 #### Testing & Examples
 
 | File                           | Description                                      |
 | ------------------------------ | ------------------------------------------------ |
-| `Protocol/kestrel_benchmark.c` | Performance profiler (1000 iterations)           |
-| `Protocol/gcs_receiver.c`      | Network receiver demo with Phase 2 optimizations |
-| `Protocol/uav_simulator.c`     | Network transmitter demo (supports CLI IP arg)   |
+| `Kestrel/src/tools/kestrel_benchmark.c` | Performance profiler |
+| `Kestrel/src/tools/key_example.c`       | Key/session example utility |
+| `Kestrel/src/apps/gcs_receiver.c`       | Interactive ground-station demo with mission upload, NPNT push, and sliding command window |
+| `Kestrel/src/apps/uav_simulator.c`      | Bidirectional UAV demo with ECDH handshake, NPNT gate, Remote ID, and TS/KLV output |
+| `Kestrel/testing/*`                    | Unit/soak/chaos/adversarial tests and VM deployment assets |
+| `Kestrel/scripts/*`                    | Helper scripts for key generation, NPNT PA creation, TS validation, compliance, and control center |
 
 ### Compiling and Testing
 
-**Option 1: Run Performance Benchmark**
+**Option 1: Build the repository targets**
 
 ```bash
-cd Protocol
-gcc -Wall -O2 -o kestrel_benchmark kestrel_benchmark.c kestrel.c \
-    kestrel_fast.c kestrel_compress.c kestrel_hw_crypto.c monocypher.c -lm
-./kestrel_benchmark
+cd Kestrel
+make
+
+# Optional: build the Legion unit test binary
+make legion_test
 ```
 
-**Option 2: Network Test (Localhost — Single PC)**
+This produces binaries in `Kestrel/bin/`:
+
+- `kestrel_benchmark`
+- `gcs_receiver`
+- `uav_simulator`
+- `key_example`
+- `legion_test` (when built explicitly)
+
+**Option 2: Network Test (Localhost / single PC)**
 
 ```bash
-cd Protocol
+cd Kestrel
 
-# Compile both
-gcc -Wall -O2 -o gcs_receiver gcs_receiver.c kestrel.c \
-    kestrel_fast.c kestrel_compress.c kestrel_hw_crypto.c monocypher.c -lws2_32 -lm
-gcc -Wall -O2 -o uav_simulator uav_simulator.c kestrel.c \
-    kestrel_fast.c kestrel_compress.c kestrel_hw_crypto.c monocypher.c -lws2_32 -lm
+# Terminal 1: Start the GCS (replace .exe with no suffix on Linux/macOS)
+bin/gcs_receiver.exe 127.0.0.1
 
-# Terminal 1: Start receiver
-./gcs_receiver
-
-# Terminal 2: Start transmitter (defaults to 127.0.0.1)
-./uav_simulator
+# Terminal 2: Start the UAV simulator
+bin/uav_simulator.exe 127.0.0.1
 ```
 
 **Option 3: Network Test (Two PCs on Same WiFi)**
 
 ```bash
-# On the RECEIVER PC:
-./gcs_receiver          # Listens on UDP port 14550
+# On the GCS PC:
+bin/gcs_receiver.exe <uav_ip>          # Listens on UDP 14552, sends commands to UDP 14553
 
-# On the SENDER PC (pass the receiver's WiFi IP as argument):
-./uav_simulator 192.168.1.25
+# On the UAV PC:
+bin/uav_simulator.exe <gcs_ip>         # Sends telemetry/ACKs to UDP 14552, listens on UDP 14553
 ```
 
-> **Note:** On Windows, add a firewall rule on the receiver PC:
-> `netsh advfirewall firewall add rule name="Kestrel" dir=in action=allow protocol=UDP localport=14550`
+> **Note:** On Windows, allow UDP ports `14552` and `14553` through the firewall for direct GCS/UAV communication.
 
-**Option 4: Compile with Hardware Acceleration**
+**Option 4: Generate NPNT and other helper artifacts**
 
 ```bash
-# ARM NEON build (4x crypto speedup)
-gcc -Wall -O2 -o kestrel_test test.c kestrel.c kestrel_fast.c kestrel_compress.c \
-    kestrel_hw_crypto.c monocypher.c -mfpu=neon -march=armv7-a -lm
+cd Kestrel
 
-# x86 AVX2 build (4x crypto speedup)
-gcc -Wall -O2 -o kestrel_test test.c kestrel.c kestrel_fast.c kestrel_compress.c \
-    kestrel_hw_crypto.c monocypher.c -mavx2 -lm
+# Generate a DGCA-style test permission artifact for the GCS demo
+python scripts/npnt_test_pa.py
+
+# Validate a generated TS file carrying PAT/PMT/video/KLV
+python scripts/validate_ts.py video_out.ts
 ```
 
 ### Expected Output
@@ -238,13 +248,18 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
    ```c
    #include "kestrel.h"
 
+   uint8_t key[32] = { /* 32-byte session key */ };
+
+   ks_session_t session;
+   ks_session_init(&session, key);
+
    // Initialize parser
    ks_parser_t parser;
    ks_parser_init(&parser);
 
    // Feed bytes in UART/serial loop
    uint8_t incoming_byte = uart_read();
-   int result = ks_parse_char(&parser, incoming_byte, encryption_key);
+   int result = ks_parse_char(&parser, incoming_byte, key);
 
    if (result == KS_OK) {
        // Full packet received!
@@ -258,13 +273,17 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
 
    ks_header_t header = {
        .payload_len = payload_len,
-       .encrypted = true,
+       .stream_type = KS_STREAM_TELEM_FAST,
+       .priority = KS_PRIO_NORMAL,
+       .sequence = 1,
+       .sys_id = 1,
+       .comp_id = 1,
+       .target_sys_id = 0,
        .msg_id = KS_MSG_ATTITUDE,
-       // ... set other fields
    };
 
    uint8_t packet[256];
-   int packet_len = kestrel_pack(packet, &header, payload, encryption_key);
+   int packet_len = kestrel_pack_with_nonce(packet, &header, payload, &session);
    uart_transmit(packet, packet_len);
    ```
 
@@ -281,20 +300,24 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
    // Initialize zero-copy parser (once per connection)
    ks_parser_zerocopy_t parser;
    ks_parser_zerocopy_init(&parser);
+   parser.key_32b = key;
 
    // Fast parsing with zero-copy
    uint8_t incoming_byte = uart_read();
-   uint8_t *payload_ptr;
-   int result = ks_parse_char_zerocopy(&parser, incoming_byte, encryption_key, &payload_ptr);
+   uint8_t payload_buf[256];
+   int result = ks_parse_char_zerocopy(&parser, incoming_byte, payload_buf, sizeof(payload_buf));
 
    if (result == KS_OK) {
-       // Payload pointer directly to received data (no copy!)
-       handle_message(&parser.header, payload_ptr);
+       // Payload is now available in payload_buf / parser.last_payload
+       handle_message(parser.last_payload, parser.msg_id);
    }
 
    // Fast packing with memory pool + crypto cache
-   uint8_t *buffer = ks_mempool_alloc(&pool);  // O(1) allocation
-   int packet_len = ks_pack_fast(buffer, &header, payload, encryption_key, &pool);
+   ks_crypto_ctx_t crypto_ctx;
+   ks_crypto_ctx_init(&crypto_ctx);
+
+   uint8_t *buffer = NULL;
+   int packet_len = ks_pack_fast(&pool, &header, payload, &session, &crypto_ctx, &buffer);
    uart_transmit(buffer, packet_len);
    ks_mempool_free(&pool, buffer);
    ```
@@ -309,7 +332,17 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
    ks_delta_init(&delta_ctx);
 
    // Encode GPS with delta compression
-   ks_gps_t gps = {.lat = 37.7749, .lon = -122.4194, .alt = 50.0f, ...};
+   ks_gps_raw_t gps = {
+       .lat = 377749000,
+       .lon = -1224194000,
+       .alt = 50000,
+       .eph = 100,
+       .epv = 150,
+       .vel = 1200,
+       .cog = 9000,
+       .fix_type = 3,
+       .satellites = 12
+   };
    uint8_t encoded[64];
    int len = ks_delta_encode_gps(&delta_ctx, &gps, encoded, sizeof(encoded));
    // First packet: 28 bytes, subsequent: 12 bytes (57% savings!)
@@ -317,7 +350,7 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
    // Decode on receiver side
    ks_delta_ctx_t rx_delta_ctx;
    ks_delta_init(&rx_delta_ctx);
-   ks_gps_t decoded_gps;
+   ks_gps_raw_t decoded_gps;
    ks_delta_decode_gps(&rx_delta_ctx, encoded, len, &decoded_gps);
    ```
 
@@ -331,7 +364,8 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
 
    // All crypto operations now use NEON/AVX2 automatically
    // No code changes needed - transparent acceleration!
-   int packet_len = kestrel_pack(buffer, &header, payload, encryption_key);
+   uint8_t buffer[256];
+   int packet_len = kestrel_pack_with_nonce(buffer, &header, payload, &session);
    // Now 4x faster if NEON/AVX2 available
    ```
 
@@ -344,7 +378,7 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ [Base Header] [Extended Header] [Payload] [MAC Tag*] [CRC-16]   │
-│    4 bytes      4-13 bytes      0-4095 B   16 bytes*  2 bytes   │
+│    4 bytes      4-15 bytes      0-4095 B   16 bytes*  2 bytes   │
 └─────────────────────────────────────────────────────────────────┘
 * 16-byte Poly1305 MAC tag only present when encrypted flag is set
 ```
@@ -352,10 +386,39 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
 **Packet Size Range:**
 
 - **Minimum:** 10 bytes (empty payload, no encryption)
-- **Maximum:** 4,122 bytes (4095-byte payload + full headers)
+- **Maximum:** 4,132 bytes (4095-byte payload + full headers)
 - **Typical:** 26-50 bytes (common telemetry messages)
 
-### Kestrel Frame – Byte-Level Breakdown
+### Current Wire Layout
+
+The current implementation in `Kestrel/src/core/kestrel.c` packs the frame as:
+
+| Region | Size | Notes |
+| ------ | ---- | ----- |
+| Base header | 4 bytes | SOF, payload length, priority, stream type, encrypted/fragmented flags, sequence upper bits |
+| Extended header | 4-15 bytes | sequence lower bits + sys_id, comp_id + msg_id, optional target_sys_id, optional fragmentation metadata, optional 8-byte nonce |
+| Payload | 0-4095 bytes | Plaintext or ciphertext payload |
+| MAC tag | 16 bytes | Present only when encryption is enabled |
+| CRC-16 | 2 bytes | Always present |
+
+The base header bit packing implemented by `ks_encode_base_header()` is:
+
+```text
+Byte 0: SOF = 0xA5
+Byte 1: payload_len[11:8] | priority | stream_type[3:2]
+Byte 2: stream_type[1:0] | payload_len[7:2]
+Byte 3: payload_len[1:0] | encrypted | fragmented | sequence[11:10]
+```
+
+The extended header implemented by `ks_encode_ext_header()` is:
+
+- 2 bytes: `sequence[9:0]` + `sys_id[5:0]`
+- 2 bytes: `comp_id[3:0]` + `msg_id[11:0]`
+- 1 byte: `target_sys_id[5:0]` for `KS_STREAM_CMD` / `KS_STREAM_CMD_ACK`
+- 2 bytes: `frag_index` + `frag_total` when fragmented
+- 8 bytes: packet nonce when encrypted
+
+### Historical Draft Notes
 
 ```
 ┌─────┌────┌────┌────┌────┌────┌─────┌─────┌───────┌─────────┌───────┌─────┐
@@ -383,7 +446,7 @@ To add Kestrel Core (implemented in the `kestrel.*` files) to your flight contro
 | (n+20) or (n+12) to (n+35) or (n+27)          | Poly1305 MAC (if encrypted)                          | 128-bit tag                                                                                                                                          | 16-byte authentication tag from ChaCha20-Poly1305 AEAD. Authenticates header + payload. **Only present when encrypted flag is set**          |
 | (n+20) or (n+12) or (n+36) or (n+28) to final | Checksum (low byte, high byte)                       | ITU X.25/SAE AS-4 hash                                                                                                                               | CRC-16 covering entire packet excluding this checksum field. Protects the packet from corruption. **Always final 2 bytes of packet**         |
 
-**Note:** The nonce (bytes 12-19) and MAC tag (16 bytes before final CRC) are only present when the encrypted flag is set in byte 3, bit 7. This makes encrypted packets 24 bytes larger than unencrypted packets.
+**Note:** This section reflects an earlier draft layout and is kept only for historical context. Use the "Current Wire Layout" section above and the constants in `Kestrel/src/core/kestrel.h` / `kestrel.c` as the authoritative format.
 
 ### Base Header (4 bytes)
 
@@ -409,13 +472,13 @@ Bits 7-6: Stream type lower 2 bits
 Bits 5-0: Payload length middle 6 bits
 ```
 
-**Byte 3: Payload Length [1:0] | Encrypted | Fragmented | Sequence [11:8]**
+**Byte 3: Payload Length [1:0] | Encrypted | Fragmented | Sequence [11:10]**
 
 ```
 Bits 7-6: Payload length lower 2 bits
-Bit 5:    Encrypted flag (1 = encrypted with AEAD)
-Bit 4:    Fragmented flag (1 = split across multiple packets)
-Bits 3-0: Sequence number upper 4 bits
+Bit 3:    Encrypted flag (1 = encrypted with AEAD)
+Bit 2:    Fragmented flag (1 = split across multiple packets)
+Bits 1-0: Sequence number upper 2 bits
 ```
 
 **Payload Length:** 12-bit field = 0-4095 bytes  
@@ -423,20 +486,18 @@ Bits 3-0: Sequence number upper 4 bits
 **Stream Type:** 4-bit field = 16 possible streams  
 **Sequence:** 12-bit field = 0-4095 (rolls over)
 
-### Extended Header (Variable: 4-13 bytes)
+### Extended Header (Variable: 4-15 bytes)
 
-The extended header contains routing and message identification:
+The current extended header contains routing and message identification:
 
 **Always Present (4 bytes):**
 
-- **Sequence Number (1 byte)** - Lower 8 bits (combined with base header for 12-bit total)
-- **System ID (1 byte)** - Source UAV/GCS identifier
-- **Component ID (1 byte)** - Source component (autopilot, gimbal, etc.)
-- **Message ID (1 byte)** - Message type identifier
+- **Sequence + System ID (2 bytes)** - lower 10 bits of sequence plus 6-bit source `sys_id`
+- **Component + Message ID (2 bytes)** - 4-bit `comp_id` plus 12-bit `msg_id`
 
 **Conditional Fields:**
 
-- **Target System ID (1 byte)** - Only if not broadcast (0xFF = broadcast)
+- **Target System ID (1 byte)** - Present for `KS_STREAM_CMD` and `KS_STREAM_CMD_ACK`
 - **Fragmentation Info (2 bytes)** - Only if fragmented flag set
   - Fragment Index (1 byte): Which fragment (0-based)
   - Fragment Total (1 byte): Total number of fragments
@@ -445,22 +506,24 @@ The extended header contains routing and message identification:
 
 **Total Extended Header Size:**
 
-- Minimum: 4 bytes (broadcast, no fragmentation, no encryption)
-- Maximum: 13 bytes (targeted, fragmented, encrypted)
+- Minimum: 4 bytes (no command target, no fragmentation, no encryption)
+- Maximum: 15 bytes (command target + fragmentation + encryption nonce)
 
 ### Stream Types (4-bit)
 
-| ID   | Stream Name | Purpose                                  |
-| ---- | ----------- | ---------------------------------------- |
-| 0    | Heartbeat   | System status, keepalive                 |
-| 1    | Telemetry   | UAV state (attitude, position, velocity) |
-| 2    | Command     | Control commands (arm, disarm, mission)  |
-| 3    | Parameter   | Configuration management                 |
-| 4    | Mission     | Waypoint upload/download                 |
-| 5    | Sensor Raw  | Unprocessed sensor readings              |
-| 6    | RC          | Radio control inputs                     |
-| 7    | Log         | On-board logging data                    |
-| 8-15 | Reserved    | Future use                               |
+| ID | Macro | Purpose |
+| -- | ----- | ------- |
+| `0x0` | `KS_STREAM_TELEM_FAST` | High-rate telemetry |
+| `0x1` | `KS_STREAM_TELEM_SLOW` | Lower-rate telemetry |
+| `0x2` | `KS_STREAM_CMD` | Commands |
+| `0x3` | `KS_STREAM_CMD_ACK` | Command acknowledgements |
+| `0x4` | `KS_STREAM_MISSION` | Mission upload/download |
+| `0x5` | `KS_STREAM_VIDEO` | Video / TS transport |
+| `0x6` | `KS_STREAM_SENSOR` | Sensor data |
+| `0x7` | `KS_STREAM_HEARTBEAT` | Heartbeat / keepalive |
+| `0x8` | `KS_STREAM_ALERT` | Alerts / urgent state |
+| `0x9` | `KS_STREAM_NPNT` | DGCA NPNT traffic |
+| `0xF` | `KS_STREAM_CUSTOM` | Custom / reserved use |
 
 ### Priority Levels
 
@@ -475,10 +538,12 @@ The extended header contains routing and message identification:
 
 ## Message Payload Specifications
 
+The payloads below document the foundational telemetry messages. Additional command/control, compliance, and video-related payloads are implemented in `Kestrel/src/core/kestrel.h` and serialized in `kestrel.c`.
+
 ### 1. Heartbeat Message (MSG_ID 0x001)
 
 **Purpose:** System status and keepalive  
-**Payload Size:** 7 bytes  
+**Payload Size:** 10 bytes  
 **Send Rate:** 1 Hz
 
 **Fields:**
@@ -488,6 +553,8 @@ The extended header contains routing and message identification:
 | system_type | uint8 | 1 | Vehicle type (quadcopter, fixed-wing, etc.) |
 | autopilot_type | uint8 | 1 | Autopilot type (PX4, ArduPilot, custom) |
 | base_mode | uint8 | 1 | Armed/disarmed, manual/auto mode flags |
+| lost_link_action | uint8 | 1 | DO-362A failsafe action (0=none, 1=Land, 2=RTL, 3=Hover) |
+| lost_link_timeout_s | uint16 | 2 | Seconds of GCS silence before failsafe triggers |
 
 **Example:**
 
@@ -496,10 +563,12 @@ ks_heartbeat_t hb = {
     .system_status = 0x12345678,
     .system_type = 5,         // Quadcopter
     .autopilot_type = 3,      // Custom autopilot
-    .base_mode = 0xAB         // Armed, auto mode
+    .base_mode = 0xAB,        // Armed, auto mode
+    .lost_link_action = 2,    // RTL
+    .lost_link_timeout_s = 3
 };
 
-uint8_t payload[7];
+uint8_t payload[10];
 ks_serialize_heartbeat(&hb, payload);
 ```
 
@@ -657,27 +726,33 @@ ks_parser_init(&parser);
 ### Nonce Management
 
 ```c
-void ks_nonce_init(ks_nonce_state_t *state);
+int ks_nonce_init(ks_nonce_state_t *state);
+uint32_t ks_nonce_get_counter(const ks_nonce_state_t *state);
+void ks_nonce_set_counter(ks_nonce_state_t *state, uint32_t counter);
 void ks_nonce_generate(ks_nonce_state_t *state, uint8_t nonce_8b[8]);
 ```
 
 **Nonce Initialization:**
 
-- Initializes hybrid counter+random nonce generator
+- Initializes the hybrid counter+random nonce generator
 - Counter starts at cryptographically random value
-- Call once at system startup
+- Returns `0` on success
 
 **Nonce Generation:**
 
 - Generates unique 8-byte nonce for each encrypted packet
 - Format: 4-byte counter + 4-byte random
 - Automatically increments counter
+- `ks_nonce_get_counter()` / `ks_nonce_set_counter()` support NVM persistence across reboot
 
 **Example:**
 
 ```c
 ks_nonce_state_t nonce_state;
 ks_nonce_init(&nonce_state);
+
+// Restore from NVM if available
+ks_nonce_set_counter(&nonce_state, saved_counter);
 
 uint8_t nonce[8];
 ks_nonce_generate(&nonce_state, nonce);  // Use for next packet
@@ -686,48 +761,56 @@ ks_nonce_generate(&nonce_state, nonce);  // Use for next packet
 ### Packet Packing
 
 ```c
-int kestrel_pack(uint8_t *buf, const ks_header_t *h,
-                 const uint8_t *payload, const uint8_t *key_32b);
-
 int kestrel_pack_with_nonce(uint8_t *buf, const ks_header_t *h,
-                             const uint8_t *payload, const uint8_t *key_32b,
-                             ks_nonce_state_t *nonce_state);
+                            const uint8_t *payload, ks_session_t *session);
+
+int kestrel_pack_cached(uint8_t *buf, const ks_header_t *h,
+                        const uint8_t *payload, ks_session_t *session,
+                        ks_crypto_ctx_t *crypto_ctx);
+
+int kestrel_pack_selective(uint8_t *buf, const ks_header_t *h,
+                           const uint8_t *payload, ks_session_t *session);
 ```
 
-**Pack Packet:**
+**Pack with Session-Managed Nonce:**
 
-- Assembles complete packet with headers, encryption, MAC, CRC
-- If `key_32b` is NULL, packet is unencrypted
+- Public API for assembling a complete packet with headers, encryption, MAC, and CRC
+- The session bundles the encryption key with nonce state
+- Pass `NULL` for `session` to send an unencrypted packet
 - Returns packet length in bytes, or negative error code
 
-**Pack with Nonce State:**
+**Cached / Selective Variants:**
 
-- Same as `kestrel_pack()` but auto-generates nonce
-- Recommended for production use
-- Ensures nonce uniqueness across packets
+- `kestrel_pack_cached()` reuses crypto context for repeated sends with the same key
+- `kestrel_pack_selective()` applies the per-message encryption policy table
 
 **Returns:**
 
 - Positive: Packet length (bytes)
 - `KS_ERR_NULL_POINTER` - Invalid pointer
 - `KS_ERR_BUFFER_OVERFLOW` - Payload too large (>512 bytes)
+- `KS_ERR_NO_KEY` - Encryption required but no session provided
 
 **Example:**
 
 ```c
+uint8_t key[32] = { /* 32-byte session key */ };
+ks_session_t session;
+ks_session_init(&session, key);
+
 ks_header_t header = {
     .payload_len = 12,
     .priority = KS_PRIO_NORMAL,
-    .stream_type = KS_STREAM_TELEMETRY,
-    .encrypted = true,
+    .stream_type = KS_STREAM_TELEM_FAST,
     .sequence = 42,
     .sys_id = 1,
+    .comp_id = 1,
     .target_sys_id = 0,  // Broadcast
     .msg_id = KS_MSG_ATTITUDE
 };
 
 uint8_t packet[256];
-int len = kestrel_pack_with_nonce(packet, &header, payload, key, &nonce_state);
+int len = kestrel_pack_with_nonce(packet, &header, payload, &session);
 uart_transmit(packet, len);
 ```
 
@@ -921,21 +1004,40 @@ The protocol now features production-grade authenticated encryption:
 
 ## Test Suite
 
-Kestrel Core includes a comprehensive unit test suite with **33 tests** achieving **100% pass rate**, validating all protocol functionality.
+Kestrel now ships with a broader validation surface: C unit-style tests, Python soak/chaos harnesses, protocol validators, and VM deployment assets. The repository is no longer best described as a single fixed-count test suite.
 
 ### Running Tests
 
 ```bash
-cd Protocol
+cd Kestrel
 
-# Using WSL (Windows)
-wsl make test
+# Build the main binaries
+make
+make legion_test
 
-# Native Linux/macOS
-make test
+# Run the Legion unit test binary (.exe on Windows)
+bin/legion_test.exe
+
+# Run soak / chaos / validation scripts as needed
+python testing/test_1min.py
+python testing/test_15min.py
+python testing/test_30min.py
+python testing/test_3h.py
+python testing/adversarial_test.py
+python testing/net_chaos.py
+python scripts/validate_ts.py video_out.ts
 ```
 
-### Test Coverage (10 Categories)
+### Validation Coverage
+
+- `testing/legion_unit_test.c` covers the Legion variant's address expansion, replay window, and memory pool.
+- `testing/packet_size_test.c` and `testing/fuzz_parser.c` exercise parser boundaries, packet sizes, and malformed input handling.
+- `testing/test_1min.py`, `test_15min.py`, `test_30min.py`, and `test_3h.py` provide duration-based soak testing for the GCS/UAV apps.
+- `testing/adversarial_test.py`, `testing/net_chaos.py`, and `testing/clean_proxy.py` simulate hostile or degraded links.
+- `scripts/validate_ts.py` validates PAT/PMT/video/KLV output for the TS/KLV path.
+- `testing/vm_deploy/` contains split-node copies for VM or multi-host deployment testing.
+
+### Historical Coverage Notes
 
 1. **Serialization/Deserialization (5 tests)**
    - Heartbeat, attitude, GPS, battery, RC input message round-trips
@@ -988,7 +1090,7 @@ make test
     - Maximum sequence number (4095)
     - All priority levels (Bulk, Normal, High, Emergency)
 
-### Test Results
+### Historical Test Results Snapshot
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
@@ -1011,7 +1113,7 @@ All issues resolved with production code fixes validated by the test suite.
 
 ### Fragmentation Behavior
 
-**Note:** The current implementation encodes and decodes fragmentation metadata (frag_index, frag_total) but does **not** reassemble fragments. Each fragment is parsed as an independent packet. Applications requiring reassembly must implement it at a higher layer.
+**Current behavior:** The codebase includes fragment generation plus receiver-side reassembly APIs (`ks_fragment_split`, `ks_reassembly_add`, and `ks_reassembly_add_timed`). Applications can still process fragments manually, but reassembly is now part of the core library surface.
 
 ---
 
@@ -1207,7 +1309,7 @@ Contributions welcome! Areas of interest:
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/new-message`)
 3. Make your changes with tests
-4. Ensure all tests pass (`make test`)
+4. Ensure the relevant build targets, unit tests, and validation scripts pass for the areas you changed
 5. Submit a pull request
 
 ---
