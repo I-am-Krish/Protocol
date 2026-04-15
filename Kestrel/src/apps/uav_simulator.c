@@ -10,6 +10,7 @@
 #include "kestrel.h"
 #include "kestrel_fast.h"
 #include "kestrel_rid.h"
+#include "kestrel_sora.h"   /* JARUS SORA OSO#06 compliance shim */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +20,9 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
+#ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
+#endif
 #define sleep(x) Sleep((x) * 1000)
 #else
 #include <sys/socket.h>
@@ -87,6 +90,9 @@ static void secure_random(uint8_t *buf, size_t len)
 // ECDH Session Key State
 static ks_session_t g_session;           /* Session bundling key + nonce state */
 static bool g_session_ready = false;     /* true once ks_session_init() has run */
+
+/* JARUS SORA OSO#06: Security event log — global to UAV process lifetime */
+static ks_sora_ctx_t g_sora_ctx;
 static uint8_t private_key[32] = {0};
 static uint8_t public_key[32]  = {0};
 
@@ -421,6 +427,9 @@ int main(int argc, char *argv[])
        The NVM nonce counter will be applied to it at that point. */
     memset(&g_session, 0, sizeof(g_session));
 
+    /* JARUS SORA OSO#06: Initialise security event log at process start */
+    ks_sora_init(&g_sora_ctx);
+
     ks_crypto_ctx_t crypto_ctx;
     ks_crypto_ctx_init(&crypto_ctx);
 
@@ -429,6 +438,7 @@ int main(int argc, char *argv[])
 
     printf("Crypto: Software | Memory Pool: %d x %d bytes\n\n",
            KS_MEMPOOL_NUM_BUFFERS, KS_MEMPOOL_BUFFER_SIZE);
+    printf("JARUS SORA OSO#06: Security event logging active.\n");
 
 // Setup Winsock
 #ifdef _WIN32
@@ -549,6 +559,10 @@ int main(int argc, char *argv[])
                 {
                     result = ks_parse_char_zerocopy(&cmd_parser, cmd_recv_buf[i], parse_buf, 256);
                 }
+                /* SORA OSO#06 HOOK: Log security-relevant parse errors (replay, MAC fail) */
+                ks_sora_on_parse_result(&g_sora_ctx, result,
+                                        255 /*GCS sys_id*/, cmd_parser.out_sequence,
+                                        get_time_ms());
 
                 if (result == 1)
                 {
@@ -602,6 +616,10 @@ int main(int argc, char *argv[])
                         if (crypto_eddsa_check(rx_kx.signature, gcs_id_public, verify_hash, 64) != 0)
                         {
                             printf(RED "  >>> ECDH FATAL: EdDSA signature verification failed. MITM detected!\n" RESET);
+                            /* SORA OSO#06 HOOK: Log mutual authentication failure (potential MITM) */
+                            ks_sora_log(&g_sora_ctx, KS_SORA_MUTUAL_AUTH_FAIL,
+                                        get_time_ms(), 1 /*UAV sys_id*/,
+                                        state.sequence, 1 /*failure*/);
                             break;
                         }
 
@@ -623,6 +641,10 @@ int main(int argc, char *argv[])
                             break;
                         }
                         crypto_wipe(derived_key, 32); /* Remove key from stack */
+                        /* SORA OSO#06 HOOK: Log session key established (key rotation event) */
+                        ks_sora_log(&g_sora_ctx, KS_SORA_KEY_ROTATED,
+                                    get_time_ms(), 1 /*UAV sys_id*/,
+                                    state.sequence, 0 /*success*/);
 
                         /* Apply saved NVM counter (prevents reuse on reboot) */
                         load_nonce_counter(&g_session, "keys/uav_nonce.dat");
@@ -678,6 +700,10 @@ int main(int argc, char *argv[])
                         ecdh_state = KS_ECDH_ESTABLISHED;
                         ecdh_retry_count = 0;
                         ecdh_last_send_time = get_time_ms();
+                        /* SORA OSO#06 HOOK: Log mutual authentication success */
+                        ks_sora_log(&g_sora_ctx, KS_SORA_MUTUAL_AUTH_OK,
+                                    get_time_ms(), 1 /*UAV sys_id*/,
+                                    state.sequence, 0 /*success*/);
 
                         printf(GREEN "  >>> ECDH: Session ESTABLISHED! (received GCS key, sent UAV key)\n" RESET);
                         printf("[TM] HANDSHAKE:ESTABLISHED\n");
@@ -1005,7 +1031,7 @@ int main(int argc, char *argv[])
                 ks_mempool_free(&pool, parse_buf);
             }
         }
-    next_iter:; // Empty statement required after label before declaration
+        /* next_iter label removed — no goto references it */
 
         // --- Update simulation ---
         float t = loop * 0.1f;
@@ -1378,6 +1404,9 @@ int main(int argc, char *argv[])
 
     // Final save on clean exit
     save_nonce_state(&g_session, "uav_nonce.dat");
+
+    /* JARUS SORA OSO#06: Print audit log on clean shutdown */
+    ks_sora_dump(&g_sora_ctx);
 
     return 0;
 }

@@ -76,7 +76,9 @@ bool ks_check_file_permissions(const char *filename)
     PACL pDacl = NULL;
     bool secure = false;
 
-    if (GetNamedSecurityInfoA(filename, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &pDacl, NULL, &pSD) == ERROR_SUCCESS)
+    /* GetNamedSecurityInfoA expects non-const LPSTR — cast explicitly to satisfy MinGW */
+    char *filename_nc = (char *)(uintptr_t)filename;
+    if (GetNamedSecurityInfoA(filename_nc, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &pDacl, NULL, &pSD) == ERROR_SUCCESS)
     {
         // Try to find if "Everyone" (World) has any access
         ACL_SIZE_INFORMATION aclSize;
@@ -84,7 +86,7 @@ bool ks_check_file_permissions(const char *filename)
         {
             secure = true; // Assume secure unless we find a wide-open ACE
             PSID everyoneSid = NULL;
-            SID_IDENTIFIER_AUTHORITY worldAuth = SECURITY_WORLD_SID_AUTHORITY;
+            SID_IDENTIFIER_AUTHORITY worldAuth = { SECURITY_WORLD_SID_AUTHORITY }; /* braces fix -Wmissing-braces */
             if (AllocateAndInitializeSid(&worldAuth, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &everyoneSid))
             {
                 for (DWORD i = 0; i < aclSize.AceCount; i++)

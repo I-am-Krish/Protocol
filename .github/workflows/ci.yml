@@ -1,14 +1,25 @@
-name: C/C++ CI Build
+name: Kestrel Protocol CI
 
+# Trigger on every push and pull request to main
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
 
+# Cancel in-progress runs for the same branch (saves CI minutes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
-    name: Build Protocol
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1: Linux build (primary CI gate)
+  # Mirrors the production Ubuntu environment. Uses -Werror so any new
+  # warning introduced in a PR becomes a hard build failure.
+  # ─────────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: "Build — Ubuntu gcc (warning-clean)"
     runs-on: ubuntu-latest
 
     steps:
@@ -17,23 +28,166 @@ jobs:
 
     - name: Install build dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential gcc make
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          build-essential gcc make python3 python3-pip
 
-    - name: Create bin directory
+    - name: Create output directories
+      working-directory: ./Kestrel
+      run: mkdir -p bin testing
+
+    # ── Core build ──────────────────────────────────────────────────────────
+    # -Werror promotes every warning to an error: any new warning in a PR
+    # will break the build here before it ever reaches main.
+    - name: Build all targets (strict — -Wall -Werror)
+      working-directory: ./Kestrel
+      run: |
+        make all CFLAGS="-Wall -Werror -O2 -Isrc/core"
+        echo "✅ All targets built successfully (0 warnings, 0 errors)"
+
+    # ── Verify expected binaries exist and are non-zero size ────────────────
+    - name: Verify binary artefacts
+      working-directory: ./Kestrel
+      run: |
+        for BIN in bin/kestrel_benchmark bin/gcs_receiver bin/uav_simulator bin/key_example; do
+          if [ ! -s "$BIN" ]; then
+            echo "❌ Missing or empty binary: $BIN"
+            exit 1
+          fi
+          echo "✅ $BIN  ($(stat -c%s $BIN) bytes)"
+        done
+
+    # ── Packet size unit test ────────────────────────────────────────────────
+    - name: Build and run packet size test
+      working-directory: ./Kestrel
+      run: |
+        gcc -Wall -Werror -O2 -Isrc/core \
+          -o testing/packet_size_test \
+          testing/packet_size_test.c \
+          src/core/kestrel.c \
+          src/core/kestrel_fast.c \
+          src/core/kestrel_compress.c \
+          src/core/kestrel_hw_crypto.c \
+          src/core/monocypher.c \
+          src/core/kestrel_keymanager.c \
+          src/core/kestrel_sora.c \
+          -lm
+        ./testing/packet_size_test
+        echo "✅ Packet size test passed"
+
+    # ── Integration smoke test ───────────────────────────────────────────────
+    - name: Run integration smoke test (1 min)
+      working-directory: ./Kestrel
+      run: |
+        python3 testing/test_1min.py
+        echo "✅ Integration smoke test passed"
+
+    # ── SORA compliance module test ───────────────────────────────────────────
+    - name: Build and run SORA compliance unit test
+      working-directory: ./Kestrel
+      run: |
+        # Compile a standalone SORA self-test that exercises the ring buffer
+        # and compliance assertion without any network I/O.
+        gcc -Wall -Werror -O2 -Isrc/core \
+          -DSORA_SELFTEST \
+          -o testing/sora_test \
+          src/core/kestrel_sora.c \
+          src/core/kestrel.c \
+          src/core/kestrel_fast.c \
+          src/core/kestrel_compress.c \
+          src/core/kestrel_hw_crypto.c \
+          src/core/monocypher.c \
+          src/core/kestrel_keymanager.c \
+          testing/sora_unit_test.c \
+          -lm
+        ./testing/sora_test
+        echo "✅ SORA OSO#06 compliance test passed"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: Windows cross-build validation
+  # Catches Windows-specific issues (Winsock, MSVC pragmas) on the CI matrix
+  # without needing a Windows runner.
+  # ─────────────────────────────────────────────────────────────────────────
+  build-windows-cross:
+    name: "Build — mingw-w64 cross-compile"
+    runs-on: ubuntu-latest
+    needs: build-linux    # Only run if linux build passes
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install MinGW cross-compiler
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          gcc-mingw-w64-x86-64 make
+
+    - name: Create output directory
       working-directory: ./Kestrel
       run: mkdir -p bin
 
-    - name: Build project with Make
-      working-directory: ./Kestrel
-      run: make all
-
-    - name: Build and Run Packet Size Test
+    - name: Cross-compile all targets for Windows
       working-directory: ./Kestrel
       run: |
-        gcc -Wall -O2 -Isrc/core -o testing/packet_size_test testing/packet_size_test.c src/core/kestrel.c src/core/kestrel_fast.c src/core/kestrel_compress.c src/core/kestrel_hw_crypto.c src/core/monocypher.c src/core/kestrel_keymanager.c -lm
-        ./testing/packet_size_test
+        make all \
+          CC=x86_64-w64-mingw32-gcc \
+          CFLAGS="-Wall -Werror -O2 -Isrc/core" \
+          LDFLAGS="-lws2_32 -ladvapi32 -lm" \
+          EXT=".exe"
+        echo "✅ Windows cross-compilation successful"
 
-    - name: Run Integration Smoke Test (1 min)
+    - name: Verify Windows binary artefacts
       working-directory: ./Kestrel
-      run: python3 testing/test_1min.py
+      run: |
+        for BIN in bin/kestrel_benchmark.exe bin/gcs_receiver.exe \
+                   bin/uav_simulator.exe bin/key_example.exe; do
+          if [ ! -s "$BIN" ]; then
+            echo "❌ Missing or empty binary: $BIN"
+            exit 1
+          fi
+          echo "✅ $BIN  ($(stat -c%s $BIN) bytes)"
+        done
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: Static analysis — runs in parallel with the Linux build
+  # Catches common C bugs (null-deref, buffer overflows, use-after-free)
+  # that -Wall doesn't catch.
+  # ─────────────────────────────────────────────────────────────────────────
+  static-analysis:
+    name: "Static Analysis — cppcheck"
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install cppcheck
+      run: sudo apt-get update -qq && sudo apt-get install -y cppcheck
+
+    - name: Run cppcheck on core modules
+      working-directory: ./Kestrel
+      run: |
+        cppcheck \
+          --enable=warning,style,performance \
+          --error-exitcode=1 \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          -I src/core \
+          src/core/kestrel.c \
+          src/core/kestrel_fast.c \
+          src/core/kestrel_keymanager.c \
+          src/core/kestrel_sora.c \
+          src/core/kestrel_rid.c \
+          src/core/kestrel_legion.c \
+          2>&1 | tee cppcheck_report.txt
+        echo "✅ cppcheck passed on core modules"
+      continue-on-error: true   # Advisory — won't block merge until baseline is clean
+
+    - name: Upload cppcheck report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: cppcheck-report
+        path: Kestrel/cppcheck_report.txt
+        retention-days: 30

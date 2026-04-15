@@ -309,7 +309,6 @@ void benchmark_phase3(benchmark_result_t *result, int iterations)
         gps.satellites = 12;
 
         uint8_t encoded[64];
-        uint8_t decoded_buf[64];
         ks_gps_raw_t decoded_gps;
 
         // Time delta encoding
@@ -322,6 +321,7 @@ void benchmark_phase3(benchmark_result_t *result, int iterations)
         // Time delta decoding
         start = get_time_us();
         ks_delta_decode_gps(&delta_ctx, encoded, encoded_len, &decoded_gps);
+        (void)decoded_gps; /* result verified by correctness tests, not benchmark */
         end = get_time_us();
         result->parse_time_us += (end - start);
     }

@@ -11,6 +11,7 @@
 #include "kestrel.h"
 #include "kestrel_fast.h"
 #include "monocypher.h"
+#include "kestrel_sora.h"   /* JARUS SORA OSO#06 compliance shim */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +21,9 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <conio.h>
+#ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
+#endif
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -82,6 +85,9 @@ static void secure_random(uint8_t *buf, size_t len)
 // ECDH Session Key State
 static ks_session_t g_session;           /* Session bundling key + nonce state */
 static bool g_session_ready = false;     /* true once ks_session_init() has run */
+
+/* JARUS SORA OSO#06: Security event log — global to GCS process lifetime */
+static ks_sora_ctx_t g_sora_ctx;
 static uint8_t private_key[32] = {0};
 static uint8_t public_key[32]  = {0};
 
@@ -715,6 +721,9 @@ int main(int argc, char *argv[])
        The NVM nonce counter will be applied to it at that point. */
     memset(&g_session, 0, sizeof(g_session));
 
+    /* JARUS SORA OSO#06: Initialise security event log at process start */
+    ks_sora_init(&g_sora_ctx);
+
     ks_crypto_ctx_t crypto_ctx;
     ks_crypto_ctx_init(&crypto_ctx);
 
@@ -722,6 +731,7 @@ int main(int argc, char *argv[])
     printf("Memory Pool: %d buffers x %d bytes = %d KB\n\n",
            KS_MEMPOOL_NUM_BUFFERS, KS_MEMPOOL_BUFFER_SIZE,
            (KS_MEMPOOL_NUM_BUFFERS * KS_MEMPOOL_BUFFER_SIZE) / 1024);
+    printf("JARUS SORA OSO#06: Security event logging active.\n");
 
 // Setup Winsock
 #ifdef _WIN32
@@ -1110,6 +1120,10 @@ int main(int argc, char *argv[])
             {
                 result = ks_parse_char_zerocopy(&parser, recv_buf[i], parse_output, sizeof(parse_output));
             }
+            /* SORA OSO#06 HOOK: Log security-relevant parse errors (replay, MAC fail) */
+            ks_sora_on_parse_result(&g_sora_ctx, result,
+                                    1 /*UAV sys_id*/, parser.out_sequence,
+                                    get_time_ms());
 
             if (result == 1)
             {
@@ -1118,7 +1132,7 @@ int main(int argc, char *argv[])
                 // Get header info
                 uint16_t msg_id = parser.msg_id;
                 uint16_t payload_len = parser.payload_len;
-                bool encrypted = (parser.header_buf[3] & KS_FLAG_ENCRYPTED) != 0;
+                (void)payload_len; /* referenced below in logging paths only */
 
                 // Process message
                 switch (msg_id)
@@ -1148,6 +1162,10 @@ int main(int argc, char *argv[])
                     {
                         printf("\n  >>> ECDH FATAL: EdDSA signature verification failed. MITM detected!\n>>> ");
                         printf("[Kestrel] You shall not pass... without authentication.\n");
+                        /* SORA OSO#06 HOOK: Log mutual authentication failure (potential MITM) */
+                        ks_sora_log(&g_sora_ctx, KS_SORA_MUTUAL_AUTH_FAIL,
+                                    get_time_ms(), 255 /*GCS sys_id*/,
+                                    cmd_sequence, 1 /*failure*/);
                         fflush(stdout);
                         break;
                     }
@@ -1167,6 +1185,10 @@ int main(int argc, char *argv[])
                         break;
                     }
                     crypto_wipe(derived_key, 32); /* Remove key from stack */
+                    /* SORA OSO#06 HOOK: Log session key established (key rotation event) */
+                    ks_sora_log(&g_sora_ctx, KS_SORA_KEY_ROTATED,
+                                get_time_ms(), 255 /*GCS sys_id*/,
+                                cmd_sequence, 0 /*success*/);
 
                     /* Apply saved NVM counter (prevents reuse on reboot) */
                     load_nonce_counter(&g_session, "keys/gcs_nonce.dat");
@@ -1224,6 +1246,10 @@ int main(int argc, char *argv[])
                     // Mark ESTABLISHED immediately - we have both keys now
                     ecdh_state = KS_ECDH_ESTABLISHED;
                     ecdh_retry_count = 0;
+                    /* SORA OSO#06 HOOK: Log mutual authentication success */
+                    ks_sora_log(&g_sora_ctx, KS_SORA_MUTUAL_AUTH_OK,
+                                get_time_ms(), 255 /*GCS sys_id*/,
+                                cmd_sequence, 0 /*success*/);
 
                     printf("  >>> ECDH: Session ESTABLISHED! (received UAV key, sent GCS key)\n>>> ");
                     printf("[TM] HANDSHAKE:ESTABLISHED\n");
@@ -1422,6 +1448,9 @@ int main(int argc, char *argv[])
 
     // Final save on clean exit
     save_nonce_state(&g_session, "gcs_nonce.dat");
+
+    /* JARUS SORA OSO#06: Print audit log on clean shutdown */
+    ks_sora_dump(&g_sora_ctx);
 
     return 0;
 }
